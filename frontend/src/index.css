@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+html, body, #root {
+  height: 100%;
+}
+
+/* Asegurar que el modo oscuro se aplique correctamente */
+.dark {
+  color-scheme: dark;
+}
