@@ -61,17 +61,41 @@ function DatePicker({ valueDisplay, onChange, className }) {
 export default function Calculator() {
   const { logout } = useSession()
   const navigate = useNavigate()
-  const [form, setForm] = useState({
-    fechaInicial: '',
-    fechaCorte: '',
-    capitalBase: '',
-    tasaMensual: '3',
-    fechaVencimiento: '',
+  const [form, setForm] = useState(() => {
+    try {
+      const raw = localStorage.getItem('calc_form_v1')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        return {
+          fechaInicial: parsed.fechaInicial || '',
+          fechaCorte: parsed.fechaCorte || '',
+          capitalBase: parsed.capitalBase != null ? String(parsed.capitalBase) : '',
+          tasaMensual: parsed.tasaMensual != null ? String(parsed.tasaMensual) : '3',
+          fechaVencimiento: parsed.fechaVencimiento || '',
+        }
+      }
+    } catch {}
+    return {
+      fechaInicial: '',
+      fechaCorte: '',
+      capitalBase: '',
+      tasaMensual: '3',
+      fechaVencimiento: '',
+    }
   })
-  const [data, setData] = useState(null)
+  const [data, setData] = useState(() => {
+    try {
+      const raw = localStorage.getItem('calc_result_v1')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('calc_sidebar_collapsed') === '1' } catch { return false }
+  })
   const [dark, setDark] = useState(false)
 
   useEffect(() => {
@@ -99,6 +123,15 @@ export default function Calculator() {
     const { name, value } = e.target
     setForm((f) => ({ ...f, [name]: value }))
   }
+
+  // Persistir formulario y UI
+  useEffect(() => {
+    try { localStorage.setItem('calc_form_v1', JSON.stringify(form)) } catch {}
+  }, [form])
+
+  useEffect(() => {
+    try { localStorage.setItem('calc_sidebar_collapsed', sidebarCollapsed ? '1' : '0') } catch {}
+  }, [sidebarCollapsed])
 
   const validateBusinessRules = () => {
     if (!validateDate(form.fechaInicial) || !validateDate(form.fechaCorte)) {
@@ -138,6 +171,7 @@ export default function Calculator() {
         fechaVencimiento: form.fechaVencimiento || null,
       })
       setData(data)
+      try { localStorage.setItem('calc_result_v1', JSON.stringify(data)) } catch {}
     } catch (err) {
       setError(err?.response?.data?.detail || err.message || 'Error del servidor')
     } finally {
