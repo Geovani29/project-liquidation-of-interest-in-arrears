@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSession } from '../auth/SessionContext'
 import { api } from '../api/client'
 import { useNavigate } from 'react-router-dom'
@@ -30,7 +30,7 @@ function fromIsoToDisplay(iso) {
   return `${dd}/${mm}/${yyyy}`
 }
 
-function DatePicker({ valueDisplay, onChange, className }) {
+function DatePicker({ valueDisplay, onChange, className, disabled }) {
   const empty = !valueDisplay
   const handleFocus = (e) => {
     e.target.type = 'date'
@@ -54,6 +54,7 @@ function DatePicker({ valueDisplay, onChange, className }) {
       onBlur={handleBlur}
       onChange={handleChange}
       className={className}
+      disabled={disabled}
     />
   )
 }
@@ -70,7 +71,7 @@ export default function Calculator() {
           fechaInicial: parsed.fechaInicial || '',
           fechaCorte: parsed.fechaCorte || '',
           capitalBase: parsed.capitalBase != null ? String(parsed.capitalBase) : '',
-          tasaMensual: parsed.tasaMensual != null ? String(parsed.tasaMensual) : '3',
+          tasaMensual: parsed.tasaMensual != null ? String(parsed.tasaMensual) : '',
           fechaVencimiento: parsed.fechaVencimiento || '',
         }
       }
@@ -79,7 +80,7 @@ export default function Calculator() {
       fechaInicial: '',
       fechaCorte: '',
       capitalBase: '',
-      tasaMensual: '3',
+      tasaMensual: '',
       fechaVencimiento: '',
     }
   })
@@ -97,6 +98,14 @@ export default function Calculator() {
     try { return localStorage.getItem('calc_sidebar_collapsed') === '1' } catch { return false }
   })
   const [dark, setDark] = useState(false)
+  const [saved, setSaved] = useState('')
+  const tableWrapRef = useRef(null)
+  const [tableScrolled, setTableScrolled] = useState(false)
+  const handleLogout = () => {
+    logout()
+    toast.success('Sesión cerrada')
+    navigate('/login')
+  }
 
   useEffect(() => {
     const root = document.documentElement
@@ -126,7 +135,13 @@ export default function Calculator() {
 
   // Persistir formulario y UI
   useEffect(() => {
-    try { localStorage.setItem('calc_form_v1', JSON.stringify(form)) } catch {}
+    setSaved('guardando')
+    const t = setTimeout(() => {
+      try { localStorage.setItem('calc_form_v1', JSON.stringify(form)) } catch {}
+      setSaved('guardado')
+      setTimeout(() => setSaved(''), 1200)
+    }, 500)
+    return () => clearTimeout(t)
   }, [form])
 
   useEffect(() => {
@@ -142,7 +157,8 @@ export default function Calculator() {
     const start = new Date(y1, m1 - 1, d1)
     const end = new Date(y2, m2 - 1, d2)
     if (start > end) return 'La fecha inicial no puede ser mayor que la de corte'
-    if (!form.capitalBase || isNaN(Number(form.capitalBase)) || Number(form.capitalBase) <= 0) {
+    const cap = Number(String(form.capitalBase || '').replace(/[^0-9]/g, ''))
+    if (!cap || isNaN(cap) || cap <= 0) {
       return 'Capital base inválido (> 0)'
     }
     if (!form.tasaMensual || isNaN(Number(form.tasaMensual)) || Number(form.tasaMensual) < 0) {
@@ -166,7 +182,7 @@ export default function Calculator() {
     try {
       const { data } = await api.post('/api/calculate', {
         ...form,
-        capitalBase: Number(form.capitalBase),
+        capitalBase: Number(String(form.capitalBase).replace(/[^0-9]/g, '')),
         tasaMensual: Number(form.tasaMensual),
         fechaVencimiento: form.fechaVencimiento || null,
       })
@@ -184,7 +200,7 @@ export default function Calculator() {
     try {
       const res = await api.post('/api/export', {
         ...form,
-        capitalBase: Number(form.capitalBase),
+        capitalBase: Number(String(form.capitalBase).replace(/[^0-9]/g, '')),
         tasaMensual: Number(form.tasaMensual),
         fechaVencimiento: form.fechaVencimiento || null,
       }, { responseType: 'blob' })
@@ -199,34 +215,56 @@ export default function Calculator() {
       a.click()
       a.remove()
       window.URL.revokeObjectURL(url)
+      const fname = a.download || 'liquidacion.xlsx'
+      toast.success(`Exportado: ${fname}`)
     } finally {
       setLoading(false)
     }
   }
 
+  // máscara de capital
+  const handleMoneyChange = (e) => {
+    const raw = e.target.value
+    const digits = String(raw || '').replace(/[^0-9]/g, '')
+    const formatted = digits ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(Number(digits)) : ''
+    setForm((f) => ({ ...f, capitalBase: formatted }))
+  }
+
+  // sombra del encabezado en scroll
+  useEffect(() => {
+    const el = tableWrapRef.current
+    if (!el) return
+    const onScroll = () => setTableScrolled(el.scrollTop > 0)
+    el.addEventListener('scroll', onScroll)
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [tableWrapRef.current])
+
   return (
     <div>
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900 flex">
-        <aside className={`m-4 shadow-md ring-1 ring-zinc-200 dark:ring-zinc-700 bg-white dark:bg-zinc-800 rounded-3xl overflow-hidden transition-all duration-300 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-72'}`}>
+      <div className="h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 flex">
+        <aside className={`m-4 shadow-md ring-1 ring-zinc-200 dark:ring-zinc-700 bg-white dark:bg-zinc-800 rounded-3xl transition-all duration-300 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-72'} h-[calc(100vh-2rem)]`}>
           <div className="relative">
             <div className="p-4 flex items-center gap-3">
               {!sidebarCollapsed && <div className="h-6 w-6" />}
             </div>
-            <button onClick={() => setSidebarCollapsed((c) => !c)} className={`absolute top-3 ${sidebarCollapsed ? 'right-3' : 'right-3'} h-7 w-7 grid place-items-center rounded-full bg-violet-600 text-white text-sm shadow-md hover:bg-violet-700 transition`} aria-label="Alternar sidebar">
+            <button onClick={() => setSidebarCollapsed((c) => !c)} className={`absolute top-3 ${sidebarCollapsed ? 'right-3' : 'right-3'} h-7 w-7 grid place-items-center rounded-full bg-violet-600 text-white text-sm shadow-md hover:bg-violet-700 transition cursor-pointer`} aria-label="Alternar sidebar">
               {sidebarCollapsed ? '›' : '‹'}
             </button>
           </div>
 
           <nav className="px-2 space-y-1">
-            <a className={`flex items-center gap-3 rounded-xl mx-2 ${sidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 bg-violet-600 text-white`}>
+            <a className={`group relative flex items-center gap-3 rounded-xl mx-2 ${sidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 bg-violet-600 text-white`}>
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">📊</span>
               {!sidebarCollapsed && <span>Liquidación intereses en mora</span>}
+              {sidebarCollapsed && (
+                <span className="pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded-md bg-zinc-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition">Liquidación</span>
+              )}
             </a>
           </nav>
 
           <div className="mt-auto p-3">
             <button
-              onClick={() => { logout(); toast.success('Sesión cerrada'); navigate('/login') }}
+              onClick={handleLogout}
               className={`w-full mb-2 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between px-3'} gap-3 py-2 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/50 active:scale-[.99] transition shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-400/60`}
               aria-label="Cerrar sesión"
             >
@@ -240,22 +278,20 @@ export default function Calculator() {
               </span>
               {!sidebarCollapsed && <span className="text-sm font-medium">Cerrar sesión</span>}
             </button>
-            <button onClick={()=>setDark(d=>!d)} className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between px-3'} gap-3 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200`}>
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-600 text-zinc-600 dark:text-zinc-200">🌙</span>
-              {!sidebarCollapsed && (
-                <span className="text-sm">{dark ? 'Light Mode' : 'Dark Mode'}</span>
-              )}
-              {!sidebarCollapsed && (
-                <span className={`ml-auto inline-flex h-6 w-11 items-center rounded-full ${dark ? 'bg-violet-600' : 'bg-zinc-300'}`}>
-                  <span className={`h-5 w-5 bg-white rounded-full transition ${dark ? 'translate-x-5' : 'translate-x-1'}`}></span>
-                </span>
-              )}
-            </button>
+            {/* Botón de tema retirado del sidebar por solicitud */}
           </div>
         </aside>
 
-        <div className="flex-1 p-4 md:p-8">
-          <h1 className="text-2xl md:text-4xl font-semibold mb-6 bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">Liquidación de intereses moratorios</h1>
+        <div className="flex-1 p-0 md:p-0 flex flex-col">
+          <header className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-900/80 backdrop-blur border-b border-zinc-200 dark:border-zinc-800 px-4 md:px-8 py-3 flex items-center justify-between no-print">
+            <h1 className="text-xl md:text-2xl font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">Liquidación de intereses moratorios</h1>
+            <div className="relative flex items-center gap-2">
+              <button onClick={()=>setDark(d=>!d)} className="h-9 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition" aria-pressed={dark}>🌙</button>
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-white grid place-items-center text-sm font-semibold">U</div>
+            </div>
+          </header>
+
+          <div className="flex-1 overflow-auto p-4 md:p-8">
 
           <form onSubmit={submit} className="bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-zinc-200 dark:ring-zinc-700 rounded-2xl p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <div>
@@ -268,7 +304,7 @@ export default function Calculator() {
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">Capital base</label>
-              <input name="capitalBase" value={form.capitalBase} onChange={handleChange} className="mt-1 w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition" placeholder="ej. 69300000" />
+              <input name="capitalBase" value={form.capitalBase} onChange={handleMoneyChange} className="mt-1 w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition" placeholder="ej. 69.300.000" />
             </div>
             <div>
               <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">Tasa interés moratorio mensual (%)</label>
@@ -278,23 +314,48 @@ export default function Calculator() {
               <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300">Fecha de vencimiento (opcional)</label>
               <DatePicker valueDisplay={form.fechaVencimiento} onChange={(v)=>setForm(f=>({...f, fechaVencimiento: v}))} className="mt-1 w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition" />
             </div>
-            <div className="sm:col-span-2 lg:col-span-3 flex gap-3">
-              <button type="submit" className="inline-flex items-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-600/90 hover:to-indigo-600/90 active:scale-[.99] transition shadow-sm px-5 py-2 disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>{loading ? 'Calculando...' : 'Calcular'}</button>
+            <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-3 items-center">
+              <button type="submit" className="inline-flex items-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-600/90 hover:to-indigo-600/90 active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>{loading ? 'Calculando...' : 'Calcular'}</button>
               {data && (
                 <button type="button" onClick={exportExcel} className="inline-flex items-center rounded-xl bg-zinc-900 text-white hover:bg-black active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>Exportar a Excel</button>
               )}
+              <button type="button" onClick={() => setForm({ fechaInicial:'', fechaCorte:'', capitalBase:'', tasaMensual:'', fechaVencimiento:'' })} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Limpiar</button>
+              <button type="button" onClick={() => setForm({ fechaInicial:'18/12/2018', fechaCorte:'24/06/2025', capitalBase:'69.300.000', tasaMensual:'3', fechaVencimiento:'18/12/2019' })} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Rellenar ejemplo</button>
+              {/* Botón de imprimir removido por solicitud */}
+              <span className="text-xs text-zinc-500">{saved === 'guardando' ? 'Guardando…' : saved === 'guardado' ? 'Guardado' : ''}</span>
             </div>
-            {error && <p className="text-red-600">{error}</p>}
+            {error && (
+              <div className="sm:col-span-2 lg:col-span-3 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-200 px-4 py-3 ring-1 ring-rose-200 dark:ring-rose-800">
+                <div className="flex items-start gap-3">
+                  <span>⚠️</span>
+                  <div className="flex-1 text-sm">{error}</div>
+                  <button type="button" onClick={()=>setError('')} className="text-sm underline">Cerrar</button>
+                </div>
+              </div>
+            )}
           </form>
 
-          {data && (
+          {loading && (
+            <div className="mt-6 space-y-6">
+              {[1,2].map((k)=>(
+                <div key={k} className="bg-white dark:bg-zinc-800 ring-1 ring-zinc-200 dark:ring-zinc-700 rounded-2xl p-4">
+                  <div className="h-4 w-64 bg-zinc-200/60 dark:bg-zinc-700/60 rounded mb-4"></div>
+                  <div className="space-y-2">
+                    {Array.from({length:6}).map((_,i)=>(<div key={i} className="h-8 w-full bg-zinc-200/50 dark:bg-zinc-700/50 rounded"></div>))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data && !loading && (
             <div className="mt-6 space-y-8">
               {data.tramos.map((tr, idx) => (
-                <div key={idx} className="bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-zinc-200 dark:ring-zinc-700 rounded-2xl p-4">
-                  <h2 className="text-center font-semibold mb-4 text-zinc-800 dark:text-zinc-200">{tr.titulo}</h2>
-                  <div className="overflow-x-auto rounded-2xl border border-zinc-200 dark:border-zinc-700">
+                <div key={idx} className="bg-white dark:bg-zinc-800 shadow-sm ring-1 ring-zinc-200 dark:ring-zinc-700 rounded-2xl p-0">
+                  <h2 className="text-center font-semibold px-4 pt-4 text-zinc-800 dark:text-zinc-200">{tr.titulo}</h2>
+                  <div ref={tableWrapRef} className="mt-2 overflow-auto rounded-2xl border border-zinc-200 dark:border-zinc-700 max-h-[60vh]">
                     <table className="min-w-full text-sm text-zinc-700 dark:text-zinc-200">
-                      <thead className="bg-zinc-50 dark:bg-zinc-700/50 text-zinc-500 dark:text-zinc-300 text-xs uppercase tracking-wide">
+                      <thead className={`sticky top-0 z-10 ${tableScrolled ? 'shadow-sm' : ''} bg-zinc-50 dark:bg-zinc-700/60 text-zinc-500 dark:text-zinc-300 text-xs uppercase tracking-wide`}>
                         <tr>
                           {['Mes causado','Del','Hasta','Días','Base','Tasa de interés moratorio','Interés causado'].map((h) => (
                             <th key={h} className="px-3 py-2 text-center border-b border-zinc-200 dark:border-zinc-700">{h}</th>
@@ -303,7 +364,7 @@ export default function Calculator() {
                       </thead>
                       <tbody className="divide-y divide-zinc-200 dark:divide-zinc-700">
                         {tr.rows.map((r, i) => (
-                          <tr key={i} className="odd:bg-white even:bg-zinc-50 dark:odd:bg-zinc-800 dark:even:bg-zinc-900/40">
+                          <tr key={i} className="odd:bg-white even:bg-zinc-50 dark:odd:bg-zinc-800 dark:even:bg-zinc-900/40 hover:bg-violet-50/60 dark:hover:bg-zinc-700/40 transition">
                             <td className="px-3 py-2">{r.mes}</td>
                             <td className="px-3 py-2 text-center">{r.del}</td>
                             <td className="px-3 py-2 text-center">{r.hasta}</td>
@@ -313,11 +374,13 @@ export default function Calculator() {
                             <td className="px-3 py-2 text-right">{currency(r.interes)}</td>
                           </tr>
                         ))}
-                        <tr className="bg-zinc-100 dark:bg-zinc-700/40 font-semibold">
+                      </tbody>
+                      <tfoot className="sticky bottom-0 bg-zinc-100 dark:bg-zinc-700/50">
+                        <tr className="font-semibold">
                           <td className="px-3 py-2 text-right" colSpan={6}>Subtotal tramo</td>
                           <td className="px-3 py-2 text-right">{currency(tr.subtotal)}</td>
                         </tr>
-                      </tbody>
+                      </tfoot>
                     </table>
                   </div>
                 </div>
@@ -328,6 +391,8 @@ export default function Calculator() {
               </div>
             </div>
           )}
+
+          </div>
         </div>
       </div>
     </div>

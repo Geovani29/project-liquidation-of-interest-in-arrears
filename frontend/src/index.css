@@ -7,4 +7,22 @@ html, body, #root {
 /* Asegurar que el modo oscuro se aplique correctamente */
 .dark {
   color-scheme: dark;
+  background-color: #0a0a0a;
 }
+
+/* Design tokens básicos */
+:root {
+  --radius-sm: 10px;
+  --radius-lg: 16px;
+  --container-max: 1280px;
+}
+
+/* Utilidades impresión */
+@media print {
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  html, body { background: #fff !important; }
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+}
+
