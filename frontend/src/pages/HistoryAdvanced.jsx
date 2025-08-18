@@ -46,7 +46,7 @@ export default function HistoryAdvanced() {
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState({
-    folderId: '',
+    folderId: 'sin-carpeta', // Estado especial para la vista principal
     dateFrom: '',
     dateTo: '',
     capitalMin: '',
@@ -59,8 +59,8 @@ export default function HistoryAdvanced() {
   })
 
   // Estados para crear etiquetas/carpetas
-  const [newTag, setNewTag] = useState({ name: '', color: '#3B82F6', description: '' })
-  const [newFolder, setNewFolder] = useState({ name: '', description: '', parentId: null })
+  const [newTag, setNewTag] = useState({ name: '', color: '#3B82F6', isPublic: false })
+  const [newFolder, setNewFolder] = useState({ name: '', parentId: null })
 
   // Función para manejar el botón regresar de forma inteligente
   const handleGoBack = () => {
@@ -117,7 +117,7 @@ export default function HistoryAdvanced() {
     try {
       // Asegurar que el servicio esté configurado con el usuario actual
       if (supabaseUserId) {
-        calculationsService.setUser(supabaseUserId)
+        await calculationsService.setUser(supabaseUserId)
       }
       
       const [foldersData, tagsData] = await Promise.all([
@@ -216,14 +216,15 @@ export default function HistoryAdvanced() {
     if (!draggedCalculation) return
     
     // No hacer nada si se suelta en la misma carpeta
-    if (draggedCalculation.folder_id === folderId) {
+    const targetFolderId = folderId === '' ? null : folderId
+    if (draggedCalculation.folder_id === targetFolderId) {
       setDraggedCalculation(null)
       setDragOverFolder(null)
       return
     }
 
     try {
-      await calculationsService.moveCalculationToFolder(draggedCalculation.id, folderId)
+      await calculationsService.moveCalculationToFolder(draggedCalculation.id, targetFolderId)
       
       // Actualizar estado local
       setCalculations(prev => 
@@ -231,14 +232,14 @@ export default function HistoryAdvanced() {
           calc.id === draggedCalculation.id 
             ? { 
                 ...calc, 
-                folder_id: folderId,
-                folder: folderId ? folders.find(f => f.id === folderId) : null
+                folder_id: targetFolderId,
+                folder: targetFolderId ? folders.find(f => f.id === targetFolderId) : null
               } 
             : calc
         )
       )
 
-      const targetName = folderId ? folders.find(f => f.id === folderId)?.name : 'Sin carpeta'
+      const targetName = targetFolderId ? folders.find(f => f.id === targetFolderId)?.name : 'Rama principal'
       toast.success('Cálculo movido', {
         description: `"${draggedCalculation.name}" se movió a "${targetName}".`
       })
@@ -289,42 +290,35 @@ export default function HistoryAdvanced() {
               </span>
             </div>
 
-            {/* Sin carpeta */}
-            <div 
-              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
-                dragOverFolder === null 
-                  ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
-                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
-              }`}
-              onDragOver={(e) => handleDragOver(e, null)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, null)}
-            >
-              <span className="text-zinc-400">📄</span>
-              <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">
-                Sin carpeta
-              </span>
-            </div>
+
 
             {/* Otras carpetas */}
-            {folders.filter(f => f.id !== viewingFolder).map(folder => (
-              <div 
-                key={folder.id}
-                className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
-                  dragOverFolder === folder.id 
-                    ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
-                    : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
-                }`}
-                onDragOver={(e) => handleDragOver(e, folder.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, folder.id)}
-              >
-                <span className="text-yellow-500">📁</span>
-                <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 truncate">
-                  {folder.name}
-                </span>
+            {folders.filter(f => f.id !== viewingFolder).length > 0 ? (
+              folders.filter(f => f.id !== viewingFolder).map(folder => (
+                <div 
+                  key={folder.id}
+                  className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
+                    dragOverFolder === folder.id 
+                      ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
+                      : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                  }`}
+                  onDragOver={(e) => handleDragOver(e, folder.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, folder.id)}
+                >
+                  <span className="text-yellow-500">📁</span>
+                  <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 truncate">
+                    {folder.name}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
+                <div className="text-xs">
+                  Solo puedes mover a "Rama principal"
+                </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
 
@@ -494,6 +488,11 @@ export default function HistoryAdvanced() {
         query: searchQuery.trim() || undefined
       }
 
+      // Si estamos en la vista principal (sin-carpeta), no aplicar filtro de carpeta
+      if (filters.folderId === 'sin-carpeta') {
+        searchFilters.folderId = undefined
+      }
+
       const result = await calculationsService.searchCalculationsAdvanced(searchFilters)
       
       // Asegurar que los datos tengan la estructura correcta
@@ -528,10 +527,10 @@ export default function HistoryAdvanced() {
       const tag = await calculationsService.createTag(
         newTag.name,
         newTag.color,
-        newTag.description
+        newTag.isPublic
       )
       setTags(prev => [...prev, tag])
-      setNewTag({ name: '', color: '#3B82F6', description: '' })
+      setNewTag({ name: '', color: '#3B82F6', isPublic: false })
       setShowCreateTag(false)
       toast.success('Etiqueta creada', {
         description: `La etiqueta "${tag.name}" se creó correctamente.`
@@ -552,11 +551,10 @@ export default function HistoryAdvanced() {
     try {
       const folder = await calculationsService.createFolder(
         newFolder.name,
-        newFolder.description,
         newFolder.parentId || null
       )
       setFolders(prev => [...prev, folder])
-      setNewFolder({ name: '', description: '', parentId: null })
+      setNewFolder({ name: '', parentId: null })
       setShowCreateFolder(false)
       toast.success('Carpeta creada', {
         description: `La carpeta "${folder.name}" se creó correctamente.`
@@ -1084,7 +1082,7 @@ export default function HistoryAdvanced() {
     return (
       <div>
         <div 
-          className={`group flex items-center gap-2 py-2 px-3 rounded-lg transition-colors ${
+          className={`group flex items-center gap-2 py-2 px-3 rounded-lg transition-colors cursor-pointer ${
             dragOverFolder === folder.id 
               ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
               : filters.folderId === folder.id 
@@ -1094,9 +1092,20 @@ export default function HistoryAdvanced() {
           style={{ paddingLeft: `${depth * 20 + 12}px` }}
           onMouseEnter={() => setShowActions(true)}
           onMouseLeave={() => setShowActions(false)}
-          onDragOver={(e) => handleDragOver(e, folder.id)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, folder.id)}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleDragOver(e, folder.id)
+          }}
+          onDragLeave={(e) => {
+            e.stopPropagation()
+            handleDragLeave(e)
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleDrop(e, folder.id)
+          }}
         >
           {hasChildren && (
             <button
@@ -1210,7 +1219,7 @@ export default function HistoryAdvanced() {
           {/* Opción "Todas las carpetas" */}
           <div 
             className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
-              !filters.folderId 
+              filters.folderId === '' 
                 ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
                 : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
             }`}
@@ -1225,28 +1234,26 @@ export default function HistoryAdvanced() {
             </span>
           </div>
 
-          {/* Cálculos sin carpeta */}
+          {/* Archivos sin carpeta - Mostrar cada archivo individualmente */}
           {calculationsWithoutFolder > 0 && (
-            <div 
-              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
-                dragOverFolder === null 
-                  ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
-                  : filters.folderId === 'none' 
-                    ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
-                    : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
-              }`}
-              onClick={() => setFilters(prev => ({ ...prev, folderId: 'none' }))}
-              onDragOver={(e) => handleDragOver(e, null)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, null)}
-            >
-              <span className="text-zinc-400">📄</span>
-              <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">
-                Sin carpeta
-              </span>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                ({calculationsWithoutFolder})
-              </span>
+            <div className="border-t border-zinc-200 dark:border-zinc-700 pt-2 mt-2">
+              <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-1 px-3">
+                📄 Archivos sueltos ({calculationsWithoutFolder})
+              </div>
+              {calculations
+                .filter(calc => !calc.folder_id)
+                .map(calculation => (
+                  <div
+                    key={calculation.id}
+                    className="flex items-center gap-2 py-2 px-3 rounded-lg transition-colors ml-4 hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    title={`${calculation.name} - Solo se puede mover desde las cards de abajo`}
+                  >
+                    <span className="text-blue-500 text-xs">📊</span>
+                    <span className="flex-1 text-xs text-zinc-600 dark:text-zinc-400 truncate">
+                      {calculation.name}
+                    </span>
+                  </div>
+                ))}
             </div>
           )}
 
@@ -1624,18 +1631,17 @@ export default function HistoryAdvanced() {
               </div>
             ))}
           </div>
-        ) : calculations.length === 0 ? (
+        ) : calculations.filter(calc => !calc.folder_id).length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-              {searchQuery ? 'No se encontraron cálculos' : 'No hay cálculos guardados'}
-            </h3>
-            <p className="text-zinc-600 dark:text-zinc-400 mb-6">
-              {searchQuery 
-                ? 'Intenta con otros términos de búsqueda o ajusta los filtros'
-                : 'Realiza tu primer cálculo y guárdalo para verlo aquí'
-              }
-            </p>
+                         <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
+               {searchQuery ? 'No se encontraron cálculos' : 'No hay archivos sin carpeta'}
+             </h3>
+             <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+               {searchQuery 
+                 ? 'Intenta con otros términos de búsqueda o ajusta los filtros'
+                 : 'Todos tus cálculos están organizados en carpetas. Puedes usar el explorador de carpetas para navegar o crear nuevos cálculos.'
+               }</p>
             {!searchQuery && (
               <button
                 onClick={() => navigate('/')}
@@ -1646,9 +1652,9 @@ export default function HistoryAdvanced() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {calculations.map((calculation, index) => renderCalculationCard(calculation, index))}
-          </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+             {calculations.filter(calc => !calc.folder_id).map((calculation, index) => renderCalculationCard(calculation, index))}
+           </div>
         )}
           </>
         )}
@@ -1686,15 +1692,17 @@ export default function HistoryAdvanced() {
                 />
               </div>
               <div className="mb-6">
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                  Descripción (opcional)
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newTag.isPublic}
+                    onChange={(e) => setNewTag(prev => ({ ...prev, isPublic: e.target.checked }))}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Etiqueta pública (visible para otros usuarios)
+                  </span>
                 </label>
-                <input
-                  type="text"
-                  value={newTag.description}
-                  onChange={(e) => setNewTag(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:text-zinc-100"
-                />
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -1751,17 +1759,7 @@ export default function HistoryAdvanced() {
                   ))}
                 </select>
               </div>
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                  Descripción (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={newFolder.description}
-                  onChange={(e) => setNewFolder(prev => ({ ...prev, description: e.target.value }))}
-                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:text-zinc-100"
-                />
-              </div>
+
               <div className="flex justify-end gap-2">
                 <button
                   type="button"

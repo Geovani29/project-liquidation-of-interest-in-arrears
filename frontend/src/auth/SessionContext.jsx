@@ -54,11 +54,17 @@ export function SessionProvider({ children }) {
           // Aquí podrías verificar el token o decodificar info del usuario
           // Por ahora, vamos a obtener el usuario desde Supabase si es posible
           const email = localStorage.getItem('user_email') // Necesitamos guardar esto también
+          console.log('🔄 SessionContext: Stored email:', email)
+          
           if (email) {
+            console.log('🔄 SessionContext: Getting supUserId for email:', email)
             const supUserId = await getSupabaseUserId(email, email)
+            console.log('🔄 SessionContext: Loading session, supUserId:', supUserId)
             setSupabaseUserId(supUserId)
             setUser({ email, id: supUserId })
-            calculationsService.setUser(supUserId)
+            await calculationsService.setUser(supUserId)
+          } else {
+            console.log('⚠️ SessionContext: No email found in localStorage')
           }
         }
       } catch (error) {
@@ -85,7 +91,8 @@ export function SessionProvider({ children }) {
       localStorage.setItem('user_email', email)
       
       // Configurar el servicio de cálculos con el usuario
-      calculationsService.setUser(supUserId)
+      console.log('🔄 SessionContext: Setting user in calculationsService:', supUserId)
+      await calculationsService.setUser(supUserId)
       
       // Migrar datos existentes si los hay
       await calculationsService.migrateExistingData()
@@ -109,7 +116,7 @@ export function SessionProvider({ children }) {
       await calculationsService.clearAll()
       
       // Resetear el servicio
-      calculationsService.setUser(null)
+      await calculationsService.setUser(null)
     } catch (error) {
       console.error('Error during logout cleanup:', error)
     }

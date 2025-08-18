@@ -63,7 +63,7 @@ function DatePicker({ valueDisplay, onChange, className, disabled }) {
 }
 
 export default function Calculator() {
-  const { logout, user } = useSession()
+  const { logout, user, supabaseUserId } = useSession()
   const navigate = useNavigate()
   const [form, setForm] = useState({
     fechaInicial: '',
@@ -386,6 +386,26 @@ export default function Calculator() {
     }
 
     try {
+      console.log('🔄 Calculator: Attempting to save calculation')
+      console.log('🔄 Calculator: user state:', user)
+      console.log('🔄 Calculator: supabaseUserId state:', supabaseUserId)
+      console.log('🔄 Calculator: calculationsService.userId:', calculationsService.userId)
+      
+      // Verificar y reconfigurar usuario si es necesario
+      if (!calculationsService.userId && supabaseUserId) {
+        console.log('🔧 Calculator: Re-setting user in calculationsService with supabaseUserId')
+        await calculationsService.setUser(supabaseUserId)
+      } else if (!calculationsService.userId && user?.id) {
+        console.log('🔧 Calculator: Re-setting user in calculationsService with user.id')
+        await calculationsService.setUser(user.id)
+      } else if (!calculationsService.userId) {
+        console.log('❌ Calculator: No userId available anywhere!')
+        toast.error('Error de autenticación', {
+          description: 'No se pudo identificar el usuario. Intenta cerrar sesión e iniciar de nuevo.'
+        })
+        return
+      }
+      
       await calculationsService.saveCalculation(saveName, form, data)
       toast.success('¡Cálculo guardado!', {
         description: `"${saveName}" se guardó correctamente en tu historial`,

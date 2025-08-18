@@ -28,8 +28,32 @@ export class CalculationsService {
   }
 
   // Configurar el usuario actual
-  setUser(userId) {
+  async setUser(userId) {
     this.userId = userId
+    console.log('🔧 CalculationsService user set:', userId)
+    
+    // Establecer contexto de usuario en Supabase para RLS
+    if (userId) {
+      try {
+        console.log('🚀 Calling set_current_user_context with:', userId)
+        const { data, error } = await supabase.rpc('set_current_user_context', {
+          p_user_id: userId
+        })
+        
+        if (error) {
+          console.error('❌ Error setting user context for RLS:', error)
+          console.error('Error details:', error.message, error.code, error.details)
+        } else {
+          console.log('✅ User context set for RLS:', userId)
+          console.log('✅ RPC response data:', data)
+        }
+      } catch (error) {
+        console.error('❌ Exception calling set_current_user_context:', error)
+        console.error('Exception details:', error.message)
+      }
+    } else {
+      console.log('⚠️ No userId provided to setUser')
+    }
   }
 
   // ===============================
@@ -347,6 +371,19 @@ export class CalculationsService {
       throw new Error('Usuario no autenticado')
     }
 
+    // Establecer contexto antes de cualquier operación DB
+    try {
+      console.log('🔄 Re-setting user context before save:', this.userId)
+      const { error: contextError } = await supabase.rpc('set_current_user_context', {
+        p_user_id: this.userId
+      })
+      if (contextError) {
+        console.error('❌ Failed to set context before save:', contextError)
+      }
+    } catch (error) {
+      console.error('❌ Exception setting context before save:', error)
+    }
+
     try {
       // Extraer información del form_data para las nuevas columnas
       let capitalAmount = null
@@ -536,17 +573,24 @@ export class CalculationsService {
   // ===============================
 
   // Crear una nueva etiqueta
-  async createTag(name, color = '#3B82F6', description = '') {
+  async createTag(name, color = '#3B82F6', isPublic = false) {
     if (!this.userId) throw new Error('Usuario no autenticado')
 
     try {
+      // Asegurar contexto RLS
+      if (this.userId) {
+        await supabase.rpc('set_current_user_context', {
+          p_user_id: this.userId
+        })
+      }
+      
       const { data, error } = await supabase
         .from('tags')
         .insert([{
           user_id: this.userId,
           name: name.trim(),
           color,
-          description: description.trim()
+          is_public: isPublic
         }])
         .select()
         .single()
@@ -689,16 +733,22 @@ export class CalculationsService {
   // ===============================
 
   // Crear una nueva carpeta
-  async createFolder(name, description = '', parentId = null) {
+  async createFolder(name, parentId = null) {
     if (!this.userId) throw new Error('Usuario no autenticado')
 
     try {
+      // Asegurar contexto RLS
+      if (this.userId) {
+        await supabase.rpc('set_current_user_context', {
+          p_user_id: this.userId
+        })
+      }
+      
       const { data, error } = await supabase
         .from('folders')
         .insert([{
           user_id: this.userId,
           name: name.trim(),
-          description: description.trim(),
           parent_id: parentId
         }])
         .select()
