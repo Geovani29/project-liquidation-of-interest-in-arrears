@@ -23,6 +23,17 @@ export default function History() {
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const userDropdownRef = useRef(null)
 
+  // Función para manejar el botón regresar de forma inteligente
+  const handleGoBack = () => {
+    // Verificar si hay historial en el navegador
+    if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      // Si no hay historial, ir al home
+      navigate('/')
+    }
+  }
+
   // Cargar cálculos al montar el componente
   useEffect(() => {
     loadCalculations()
@@ -90,17 +101,25 @@ export default function History() {
     // Guardar el cálculo seleccionado en localStorage para que Calculator lo cargue
     localStorage.setItem('load_calculation', JSON.stringify(calculation))
     navigate('/interes-mora')
-    toast.success(`Cargando: ${calculation.name}`)
+    toast.success('Cálculo cargado', {
+      description: `"${calculation.name}" se cargó en la calculadora`,
+      duration: 3000
+    })
   }
 
   const handleDuplicate = async (calculation) => {
     try {
       await calculationsService.duplicateCalculation(calculation.id)
-      toast.success('Cálculo duplicado')
+      toast.success('¡Cálculo duplicado!', {
+        description: `Se creó una copia de "${calculation.name}"`,
+        duration: 3000
+      })
       loadCalculations()
     } catch (error) {
       console.error('Error duplicating:', error)
-      toast.error('Error duplicando cálculo')
+      toast.error('Error al duplicar', {
+        description: 'No se pudo duplicar el cálculo. Inténtalo de nuevo.'
+      })
     }
   }
 
@@ -109,11 +128,16 @@ export default function History() {
     
     try {
       await calculationsService.deleteCalculation(calculation.id)
-      toast.success('Cálculo eliminado')
+      toast.success('Cálculo eliminado', {
+        description: `"${calculation.name}" se eliminó permanentemente`,
+        duration: 3000
+      })
       loadCalculations()
     } catch (error) {
       console.error('Error deleting:', error)
-      toast.error('Error eliminando cálculo')
+      toast.error('Error al eliminar', {
+        description: 'No se pudo eliminar el cálculo. Inténtalo de nuevo.'
+      })
     }
   }
 
@@ -132,11 +156,16 @@ export default function History() {
       await calculationsService.updateCalculationName(editingId, editingName)
       setEditingId(null)
       setEditingName('')
-      toast.success('Nombre actualizado')
+      toast.success('Nombre actualizado', {
+        description: `El cálculo ahora se llama "${editingName}"`,
+        duration: 3000
+      })
       loadCalculations()
     } catch (error) {
       console.error('Error updating name:', error)
-      toast.error('Error actualizando nombre')
+      toast.error('Error al actualizar', {
+        description: 'No se pudo cambiar el nombre. Inténtalo de nuevo.'
+      })
     }
   }
 
@@ -169,7 +198,7 @@ export default function History() {
     const resultData = calculation.result_data || {}
 
     return (
-      <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 p-6 hover:shadow-md transition-shadow">
+      <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 p-6 hover:shadow-lg hover:shadow-zinc-200/50 dark:hover:shadow-zinc-900/50 hover:-translate-y-1 transition-all duration-300 ease-out hover:border-violet-200 dark:hover:border-violet-800">
         {/* Header con nombre y acciones */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
@@ -287,12 +316,12 @@ export default function History() {
             </div>
 
             <div className="flex items-center gap-4">
-              <Link
-                to="/"
+              <button
+                onClick={handleGoBack}
                 className="bg-zinc-600 text-white px-4 py-2 rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-2"
               >
                 ← Regresar
-              </Link>
+              </button>
               
               {/* Dropdown de usuario */}
               <div className="relative" ref={userDropdownRef}>
@@ -304,7 +333,7 @@ export default function History() {
                 </button>
                 
                 {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 py-2 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 py-2 z-50 animate-scaleIn">
                     <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Usuario</p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">{user?.email || 'user@example.com'}</p>
@@ -379,8 +408,45 @@ export default function History() {
 
         {/* Lista de cálculos */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-zinc-500 dark:text-zinc-400">Cargando cálculos...</div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 p-6 animate-pulse">
+                {/* Header skeleton */}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <div className="h-6 bg-zinc-200 dark:bg-zinc-700 rounded w-3/4 mb-2"></div>
+                    <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-1/2"></div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="h-8 w-8 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
+                    <div className="h-8 w-8 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
+                    <div className="h-8 w-8 bg-zinc-200 dark:bg-zinc-700 rounded-full"></div>
+                  </div>
+                </div>
+
+                {/* Content skeleton */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <div className="h-5 bg-zinc-200 dark:bg-zinc-700 rounded w-20 mb-2"></div>
+                    <div className="space-y-1">
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-full"></div>
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-3/4"></div>
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-5/6"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="h-5 bg-zinc-200 dark:bg-zinc-700 rounded w-24 mb-2"></div>
+                    <div className="space-y-1">
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-full"></div>
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-1/2"></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Button skeleton */}
+                <div className="h-10 bg-zinc-200 dark:bg-zinc-700 rounded-lg w-full"></div>
+              </div>
+            ))}
           </div>
         ) : resultsToShow.length === 0 ? (
           <div className="text-center py-12">
@@ -405,8 +471,14 @@ export default function History() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {resultsToShow.map((calculation) => (
-              <CalculationCard key={calculation.id} calculation={calculation} />
+            {resultsToShow.map((calculation, index) => (
+              <div 
+                key={calculation.id}
+                className="animate-fadeInUp"
+                style={{ animationDelay: `${index * 100}ms`, animationFillMode: 'both' }}
+              >
+                <CalculationCard calculation={calculation} />
+              </div>
             ))}
           </div>
         )}

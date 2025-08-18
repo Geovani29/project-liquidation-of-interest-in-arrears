@@ -378,12 +378,20 @@ export default function Calculator() {
 
     try {
       await calculationsService.saveCalculation(saveName, form, data)
-      toast.success('Cálculo guardado exitosamente')
+      toast.success('¡Cálculo guardado!', {
+        description: `"${saveName}" se guardó correctamente en tu historial`,
+        action: {
+          label: 'Ver historial',
+          onClick: () => navigate('/historial')
+        }
+      })
       setShowSaveDialog(false)
       setSaveName('')
     } catch (error) {
       console.error('Error saving calculation:', error)
-      toast.error('Error guardando cálculo')
+      toast.error('Error al guardar', {
+        description: 'No se pudo guardar el cálculo. Inténtalo de nuevo.'
+      })
     }
   }
 
@@ -506,7 +514,7 @@ export default function Calculator() {
                 </button>
                 
 {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 py-2 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 py-2 z-50 animate-scaleIn">
                     <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Usuario</p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">{user?.email || 'Usuario'}</p>
@@ -605,15 +613,62 @@ export default function Calculator() {
           </form>
 
           {loading && (
-            <div className="mt-6 space-y-6">
-              {[1,2].map((k)=>(
-                <div key={k} className="bg-white dark:bg-zinc-800 ring-1 ring-zinc-200 dark:ring-zinc-700 rounded-2xl p-4">
-                  <div className="h-4 w-64 bg-zinc-200/60 dark:bg-zinc-700/60 rounded mb-4"></div>
-                  <div className="space-y-2">
-                    {Array.from({length:6}).map((_,i)=>(<div key={i} className="h-8 w-full bg-zinc-200/50 dark:bg-zinc-700/50 rounded"></div>))}
+            <div className="mt-6">
+              <div className="bg-white dark:bg-zinc-800 rounded-xl border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+                {/* Header de loading con animación */}
+                <div className="bg-gradient-to-r from-blue-50 to-violet-50 dark:from-blue-900/30 dark:to-violet-900/30 px-6 py-4 border-b border-zinc-200 dark:border-zinc-700">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="h-6 w-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-700 dark:text-blue-200">Calculando intereses moratorios</h3>
+                      <p className="text-sm text-blue-600 dark:text-blue-300">Procesando datos y generando liquidación...</p>
+                    </div>
                   </div>
                 </div>
-              ))}
+                
+                {/* Skeleton de tabla mejorado */}
+                <div className="p-6">
+                  <div className="space-y-4">
+                    {/* Header de tabla skeleton */}
+                    <div className="grid grid-cols-4 gap-4 pb-3 border-b border-zinc-200 dark:border-zinc-700">
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse"></div>
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse"></div>
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse"></div>
+                      <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded animate-pulse"></div>
+                    </div>
+                    
+                    {/* Filas de tabla skeleton con variación */}
+                    {Array.from({ length: 8 }, (_, i) => (
+                      <div key={i} className="grid grid-cols-4 gap-4 py-2" style={{ animationDelay: `${i * 100}ms` }}>
+                        <div className="h-3 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse"></div>
+                        <div className="h-3 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" style={{ width: `${75 + Math.random() * 25}%` }}></div>
+                        <div className="h-3 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" style={{ width: `${60 + Math.random() * 40}%` }}></div>
+                        <div className="h-3 bg-zinc-100 dark:bg-zinc-800 rounded animate-pulse" style={{ width: `${80 + Math.random() * 20}%` }}></div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Resumen skeleton */}
+                  <div className="mt-8 p-4 bg-zinc-50 dark:bg-zinc-900 rounded-lg">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-1/2 mb-2 animate-pulse"></div>
+                        <div className="h-6 bg-zinc-200 dark:bg-zinc-700 rounded w-3/4 animate-pulse"></div>
+                      </div>
+                      <div>
+                        <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-1/2 mb-2 animate-pulse"></div>
+                        <div className="h-6 bg-zinc-200 dark:bg-zinc-700 rounded w-3/4 animate-pulse"></div>
+                      </div>
+                      <div>
+                        <div className="h-4 bg-zinc-200 dark:bg-zinc-700 rounded w-1/2 mb-2 animate-pulse"></div>
+                        <div className="h-6 bg-zinc-200 dark:bg-zinc-700 rounded w-3/4 animate-pulse"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -667,8 +722,8 @@ export default function Calculator() {
 
       {/* Modal para guardar cálculo */}
       {showSaveDialog && (
-        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-scaleIn">
+          <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 w-full max-w-md mx-4 animate-scaleIn shadow-2xl">
             <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
               Guardar Cálculo
             </h3>
