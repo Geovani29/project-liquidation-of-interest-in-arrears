@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { login as loginApi } from '../api/auth'
 import { getSupabaseUserId } from '../api/supabase'
+import { calculationsService } from '../services/calculations'
 
 const SessionContext = createContext(null)
 
@@ -46,22 +47,33 @@ export function SessionProvider({ children }) {
       const supUserId = await getSupabaseUserId(email, email) // usamos email como roble_user_id por ahora
       setSupabaseUserId(supUserId)
       setUser({ email, id: supUserId })
+      
+      // Configurar el servicio de cálculos con el usuario
+      calculationsService.setUser(supUserId)
+      
+      // Migrar datos existentes si los hay
+      await calculationsService.migrateExistingData()
     } catch (error) {
       console.error('Error creating/getting Supabase user:', error)
       // No falla el login si Supabase falla, solo log el error
     }
   }
 
-  const logout = () => {
+  const logout = async () => {
     setAccessToken(null)
     setRefreshToken(null)
     setUser(null)
     setSupabaseUserId(null)
+    
     try {
-      // Limpiar estados persistidos de cálculo para no mostrar tablas previas al reingresar
-      localStorage.removeItem('calc_result_v1')
-      localStorage.removeItem('calc_form_v1')
-    } catch {}
+      // Limpiar datos usando el servicio de cálculos
+      await calculationsService.clearAll()
+      
+      // Resetear el servicio
+      calculationsService.setUser(null)
+    } catch (error) {
+      console.error('Error during logout cleanup:', error)
+    }
   }
 
   const value = useMemo(() => ({ 

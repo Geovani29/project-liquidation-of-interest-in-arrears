@@ -3,6 +3,7 @@ import { useSession } from '../auth/SessionContext'
 import { api } from '../api/client'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { calculationsService } from '../services/calculations'
 
 const DATE_FMT = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
 
@@ -62,43 +63,20 @@ function DatePicker({ valueDisplay, onChange, className, disabled }) {
 export default function Calculator() {
   const { logout } = useSession()
   const navigate = useNavigate()
-  const [form, setForm] = useState(() => {
-    try {
-      const raw = localStorage.getItem('calc_form_v1')
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        return {
-          fechaInicial: parsed.fechaInicial || '',
-          fechaCorte: parsed.fechaCorte || '',
-          capitalBase: parsed.capitalBase != null ? String(parsed.capitalBase) : '',
-          tasaMensual: parsed.tasaMensual != null ? String(parsed.tasaMensual) : '',
-          fechaVencimiento: parsed.fechaVencimiento || '',
-        }
-      }
-    } catch {}
-    return {
-      fechaInicial: '',
-      fechaCorte: '',
-      capitalBase: '',
-      tasaMensual: '',
-      fechaVencimiento: '',
-    }
+  const [form, setForm] = useState({
+    fechaInicial: '',
+    fechaCorte: '',
+    capitalBase: '',
+    tasaMensual: '',
+    fechaVencimiento: '',
   })
-  const [data, setData] = useState(() => {
-    try {
-      const raw = localStorage.getItem('calc_result_v1')
-      return raw ? JSON.parse(raw) : null
-    } catch {
-      return null
-    }
-  })
+  const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return localStorage.getItem('calc_sidebar_collapsed') === '1' } catch { return false }
-  })
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [dark, setDark] = useState(false)
   const [saved, setSaved] = useState('')
+  const [syncStatus, setSyncStatus] = useState('idle') // idle, syncing, synced, error, offline
   const tableWrapRef = useRef(null)
   const [tableScrolled, setTableScrolled] = useState(false)
   const handleLogout = () => {
@@ -106,6 +84,68 @@ export default function Calculator() {
     toast.success('Sesión cerrada')
     navigate('/')
   }
+
+  // Cargar datos iniciales del servicio
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        // Cargar datos del formulario
+        const formData = await calculationsService.loadFormData()
+        if (formData) {
+          setForm(formData)
+        }
+
+        // Cargar resultados
+        const resultData = await calculationsService.loadResults()
+        if (resultData) {
+          setData(resultData)
+        }
+
+        // Cargar estado del sidebar
+        const sidebarState = calculationsService.loadSidebarState()
+        setSidebarCollapsed(sidebarState)
+      } catch (error) {
+        console.error('Error loading initial data:', error)
+      }
+    }
+
+    loadInitialData()
+  }, [])
+
+  // Monitorear estado de sincronización
+  useEffect(() => {
+    const updateSyncStatus = () => {
+      const status = calculationsService.getStatus()
+      if (!status.hasUser) {
+        setSyncStatus('idle')
+      } else if (!status.isOnline) {
+        setSyncStatus('offline')
+      } else if (status.canSync) {
+        setSyncStatus('synced')
+      } else {
+        setSyncStatus('error')
+      }
+    }
+
+    // Actualizar estado inicial
+    updateSyncStatus()
+
+    // Escuchar cambios de conectividad
+    const handleOnline = () => updateSyncStatus()
+    const handleOffline = () => updateSyncStatus()
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    // Actualizar estado cada 30 segundos
+    const interval = setInterval(updateSyncStatus, 30000)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+      clearInterval(interval)
+    }
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -133,19 +173,27 @@ export default function Calculator() {
     setForm((f) => ({ ...f, [name]: value }))
   }
 
-  // Persistir formulario y UI
+  // Persistir formulario usando el servicio
   useEffect(() => {
     setSaved('guardando')
-    const t = setTimeout(() => {
-      try { localStorage.setItem('calc_form_v1', JSON.stringify(form)) } catch {}
-      setSaved('guardado')
-      setTimeout(() => setSaved(''), 1200)
+    setSyncStatus('syncing')
+    const t = setTimeout(async () => {
+      try {
+        await calculationsService.saveFormData(form)
+        setSaved('guardado')
+        setSyncStatus('synced')
+        setTimeout(() => setSaved(''), 1200)
+      } catch (error) {
+        console.error('Error saving form data:', error)
+        setSaved('')
+        setSyncStatus('error')
+      }
     }, 500)
     return () => clearTimeout(t)
   }, [form])
 
   useEffect(() => {
-    try { localStorage.setItem('calc_sidebar_collapsed', sidebarCollapsed ? '1' : '0') } catch {}
+    calculationsService.saveSidebarState(sidebarCollapsed)
   }, [sidebarCollapsed])
 
   const validateBusinessRules = () => {
@@ -187,7 +235,11 @@ export default function Calculator() {
         fechaVencimiento: form.fechaVencimiento || null,
       })
       setData(data)
-      try { localStorage.setItem('calc_result_v1', JSON.stringify(data)) } catch {}
+      try {
+        await calculationsService.saveResults(data, form)
+      } catch (error) {
+        console.error('Error saving results:', error)
+      }
     } catch (err) {
       setError(err?.response?.data?.detail || err.message || 'Error del servidor')
     } finally {
@@ -220,6 +272,53 @@ export default function Calculator() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleLimpiar = async () => {
+    try {
+      const emptyForm = { fechaInicial:'', fechaCorte:'', capitalBase:'', tasaMensual:'', fechaVencimiento:'' }
+      setForm(emptyForm)
+      setData(null)
+      await calculationsService.clearCalculation()
+    } catch (error) {
+      console.error('Error clearing calculation:', error)
+    }
+  }
+
+  const handleRellenarEjemplo = () => {
+    setForm({ 
+      fechaInicial:'18/12/2018', 
+      fechaCorte:'24/06/2025', 
+      capitalBase:'69.300.000', 
+      tasaMensual:'3', 
+      fechaVencimiento:'18/12/2019' 
+    })
+  }
+
+  // Componente para mostrar estado de sincronización
+  const SyncIndicator = () => {
+    const getIndicator = () => {
+      switch (syncStatus) {
+        case 'syncing':
+          return { icon: '🔄', text: 'Sincronizando...', color: 'text-blue-600' }
+        case 'synced':
+          return { icon: '☁️', text: 'Sincronizado', color: 'text-green-600' }
+        case 'offline':
+          return { icon: '📱', text: 'Sin conexión', color: 'text-yellow-600' }
+        case 'error':
+          return { icon: '⚠️', text: 'Error sync', color: 'text-red-600' }
+        default:
+          return { icon: '💾', text: 'Local', color: 'text-gray-500' }
+      }
+    }
+
+    const indicator = getIndicator()
+    return (
+      <span className={`text-xs ${indicator.color} flex items-center gap-1`}>
+        <span>{indicator.icon}</span>
+        <span>{indicator.text}</span>
+      </span>
+    )
   }
 
   // máscara de capital
@@ -318,10 +417,13 @@ export default function Calculator() {
               {data && (
                 <button type="button" onClick={exportExcel} className="inline-flex items-center rounded-xl bg-zinc-900 text-white hover:bg-black active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>Exportar a Excel</button>
               )}
-              <button type="button" onClick={() => setForm({ fechaInicial:'', fechaCorte:'', capitalBase:'', tasaMensual:'', fechaVencimiento:'' })} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Limpiar</button>
-              <button type="button" onClick={() => setForm({ fechaInicial:'18/12/2018', fechaCorte:'24/06/2025', capitalBase:'69.300.000', tasaMensual:'3', fechaVencimiento:'18/12/2019' })} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Rellenar ejemplo</button>
+              <button type="button" onClick={handleLimpiar} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Limpiar</button>
+              <button type="button" onClick={handleRellenarEjemplo} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Rellenar ejemplo</button>
               {/* Botón de imprimir removido por solicitud */}
-              <span className="text-xs text-zinc-500">{saved === 'guardando' ? 'Guardando…' : saved === 'guardado' ? 'Guardado' : ''}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-zinc-500">{saved === 'guardando' ? 'Guardando…' : saved === 'guardado' ? 'Guardado' : ''}</span>
+                <SyncIndicator />
+              </div>
             </div>
             {error && (
               <div className="sm:col-span-2 lg:col-span-3 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-200 px-4 py-3 ring-1 ring-rose-200 dark:ring-rose-800">
