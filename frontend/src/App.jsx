@@ -13,9 +13,27 @@ import Home from './pages/Home.jsx'
 function ProtectedRoute({ children }) {
   const { accessToken } = useSession()
   const location = useLocation()
-  if (!accessToken) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />
+  
+  if (!accessToken) {
+    // Mapear rutas viejas a nuevas para el redirect
+    const routeMap = {
+      '/interes-mora': '/app/c',
+      '/historial': '/app/h',
+      '/analytics': '/app/a'
+    }
+    
+    const redirectPath = routeMap[location.pathname] || location.pathname
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirectPath)}`} replace />
+  }
   return children
 }
+
+/*
+🔐 Mapeo de rutas ofuscadas:
+/app/c → Calculadora (interes-mora)
+/app/h → Historial  
+/app/a → Analytics
+*/
 
 export default function App() {
   return (
@@ -23,14 +41,18 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/interes-mora" element={<ProtectedRoute><Calculator /></ProtectedRoute>} />
-          <Route path="/historial" element={<ProtectedRoute><HistoryAdvanced /></ProtectedRoute>} />
-          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/app/c" element={<ProtectedRoute><Calculator /></ProtectedRoute>} />
+          <Route path="/app/h" element={<ProtectedRoute><HistoryAdvanced /></ProtectedRoute>} />
+          <Route path="/app/a" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          {/* Rutas de compatibilidad (redirect a las nuevas) */}
+          <Route path="/interes-mora" element={<Navigate to="/app/c" replace />} />
+          <Route path="/historial" element={<Navigate to="/app/h" replace />} />
+          <Route path="/analytics" element={<Navigate to="/app/a" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

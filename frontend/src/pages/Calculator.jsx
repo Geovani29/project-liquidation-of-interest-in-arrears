@@ -614,7 +614,7 @@ export default function Calculator() {
                       </button>
                       
                       <Link
-                        to="/historial"
+                        to="/app/h"
                         onClick={() => setShowUserDropdown(false)}
                         className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
                       >
@@ -623,7 +623,7 @@ export default function Calculator() {
                       </Link>
                       
                       <Link
-                        to="/analytics"
+                        to="/app/a"
                         onClick={() => setShowUserDropdown(false)}
                         className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
                       >

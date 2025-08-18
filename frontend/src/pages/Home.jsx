@@ -29,10 +29,10 @@ export default function Home() {
 
   const goToInteres = () => {
     if (!accessToken) {
-      navigate('/login?redirect=/interes-mora')
+      navigate('/login?redirect=/app/c')
       return
     }
-    navigate('/interes-mora')
+    navigate('/app/c')
   }
 
   return (

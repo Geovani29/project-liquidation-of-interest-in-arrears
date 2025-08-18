@@ -833,12 +833,12 @@ export default function HistoryAdvanced() {
 
   const handleLoadCalculation = (calculation) => {
     localStorage.setItem('load_calculation', JSON.stringify(calculation))
-    navigate('/interes-mora')
+    navigate('/app/c')
     toast.success('Cálculo cargado', {
       description: 'Los datos se cargaron en la calculadora.',
       action: {
         label: 'Ir a calculadora',
-        onClick: () => navigate('/interes-mora')
+        onClick: () => navigate('/app/c')
       }
     })
   }
@@ -1507,7 +1507,7 @@ export default function HistoryAdvanced() {
                     </button>
                     
                     <button 
-                      onClick={() => navigate('/interes-mora')}
+                      onClick={() => navigate('/app/c')}
                       className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
                     >
                       <img src={historialIcon} alt="Calculadora" className="w-4 h-4" />
@@ -1515,7 +1515,7 @@ export default function HistoryAdvanced() {
                     </button>
                     
                     <button 
-                      onClick={() => navigate('/analytics')}
+                      onClick={() => navigate('/app/a')}
                       className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
                     >
                       📊 Analytics
