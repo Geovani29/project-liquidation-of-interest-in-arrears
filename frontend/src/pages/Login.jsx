@@ -19,7 +19,9 @@ export default function Login() {
     try {
       await login(email, password)
       toast.success('Has iniciado sesión correctamente')
-      navigate('/')
+      const params = new URLSearchParams(window.location.search)
+      const redirect = params.get('redirect') || '/'
+      navigate(redirect)
     } catch (err) {
       const msg = err?.response?.data?.detail || 'Error de autenticación'
       setError(msg)
@@ -40,14 +42,9 @@ export default function Login() {
           <input value={password} onChange={(e)=>setPassword(e.target.value)} type={show ? 'text' : 'password'} className="peer w-full rounded-2xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-4 py-3 text-base pr-12 relative z-0" placeholder="••••••••" />
           <button type="button" onClick={()=>setShow(s=>!s)} className="absolute inset-y-0 right-3 my-auto h-8 w-8 grid place-items-center text-zinc-600 dark:text-zinc-300 hover:text-zinc-800 dark:hover:text-zinc-100 z-10 pointer-events-auto" aria-label="Mostrar u ocultar contraseña">
             {show ? (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
-                <path d="M10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />
-                <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 010-1.18l3.75-4.5a1.65 1.65 0 012.32-.512l.529.432a1.65 1.65 0 002.32-.512l3.75-4.5a1.65 1.65 0 012.32-.512l.529.432a1.65 1.65 0 002.32-.512l3.75-4.5a1.65 1.65 0 012.32-.512l.333.274a1.65 1.65 0 010 1.18l-3.75 4.5a1.65 1.65 0 01-2.32.512l-.529-.432a1.65 1.65 0 00-2.32.512l-3.75 4.5a1.65 1.65 0 01-2.32.512l-.529-.432a1.65 1.65 0 00-2.32.512l-3.75 4.5a1.65 1.65 0 01-2.32.512l-.333-.274z" clipRule="evenodd" />
-              </svg>
+              <img src="/src/assets/esconder.svg" alt="Ocultar contraseña" className="h-5 w-5" />
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5" aria-hidden="true">
-                <path fillRule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l14.5 14.5a.75.75 0 101.06-1.06l-1.745-1.745a10.029 10.029 0 003.3-4.38 1.651 1.651 0 000-1.18l-3.75-4.5a1.65 1.65 0 00-2.32-.512l-.529.432a1.65 1.65 0 01-2.32-.512l-2.096-2.516-1.12-1.344L3.28 2.22zM10 12.5a2.5 2.5 0 01-2.5-2.5 1.65 1.65 0 01-1.512-2.32l-1.25-1.5a4 4 0 00-4.012 5.32l-3.095 3.712a1.65 1.65 0 000 1.18l3.75 4.5a1.65 1.65 0 002.32.512l.529-.432a1.65 1.65 0 012.32.512l3.75 4.5a1.65 1.65 0 002.32.512l.529-.432a1.65 1.65 0 012.32.512l1.344 1.12 2.516 2.096a.75.75 0 101.06-1.06l-14.5-14.5zM10 6.5a2.5 2.5 0 00-2.5 2.5 1.65 1.65 0 001.512 2.32l1.25 1.5a4 4 0 014.012-5.32l3.095-3.712a1.65 1.65 0 000-1.18l-3.75-4.5a1.65 1.65 0 00-2.32-.512l-.529.432a1.65 1.65 0 01-2.32-.512l-3.75-4.5a1.65 1.65 0 00-2.32-.512l-.529.432a1.65 1.65 0 01-2.32.512L1.39 3.173a.75.75 0 00-1.06 1.06l1.745 1.745a10.029 10.029 0 00-3.3 4.38 1.651 1.651 0 000 1.18l3.75 4.5a1.65 1.65 0 002.32.512l.529-.432a1.65 1.65 0 012.32.512l2.096 2.516 1.12 1.344L16.72 17.78a.75.75 0 001.06-1.06l-1.745-1.745a10.029 10.029 0 003.3-4.38 1.651 1.651 0 000-1.18l-3.75-4.5a1.65 1.65 0 00-2.32-.512l-.529.432a1.65 1.65 0 01-2.32-.512l-2.096-2.516-1.12-1.344L3.28 2.22z" clipRule="evenodd" />
-              </svg>
+              <img src="/src/assets/ver.svg" alt="Ver contraseña" className="h-5 w-5" />
             )}
           </button>
         </div>

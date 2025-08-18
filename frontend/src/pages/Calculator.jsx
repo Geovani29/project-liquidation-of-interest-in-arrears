@@ -104,7 +104,7 @@ export default function Calculator() {
   const handleLogout = () => {
     logout()
     toast.success('Sesión cerrada')
-    navigate('/login')
+    navigate('/')
   }
 
   useEffect(() => {
@@ -243,19 +243,18 @@ export default function Calculator() {
     <div>
       <div className="h-screen overflow-hidden bg-zinc-50 dark:bg-zinc-900 flex">
         <aside className={`m-4 shadow-md ring-1 ring-zinc-200 dark:ring-zinc-700 bg-white dark:bg-zinc-800 rounded-3xl transition-all duration-300 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-72'} h-[calc(100vh-2rem)]`}>
-          <div className="relative">
-            <div className="p-4 flex items-center gap-3">
-              {!sidebarCollapsed && <div className="h-6 w-6" />}
-            </div>
-            <button onClick={() => setSidebarCollapsed((c) => !c)} className={`absolute top-3 ${sidebarCollapsed ? 'right-3' : 'right-3'} h-7 w-7 grid place-items-center rounded-full bg-violet-600 text-white text-sm shadow-md hover:bg-violet-700 transition cursor-pointer`} aria-label="Alternar sidebar">
-              {sidebarCollapsed ? '›' : '‹'}
-            </button>
-          </div>
+			<div className="p-3 flex items-center justify-end">
+            <button onClick={() => setSidebarCollapsed((c) => !c)} className="h-7 w-7 grid place-items-center rounded-full bg-violet-500 text-white text-sm shadow-md hover:bg-violet-600 transition cursor-pointer" aria-label="Alternar sidebar">
+					{sidebarCollapsed ? '›' : '‹'}
+				</button>
+			</div>
 
           <nav className="px-2 space-y-1">
-            <a className={`group relative flex items-center gap-3 rounded-xl mx-2 ${sidebarCollapsed ? 'justify-center px-0' : 'px-3'} py-2 bg-violet-600 text-white`}>
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/20">📊</span>
-              {!sidebarCollapsed && <span>Liquidación intereses en mora</span>}
+            <a className={`group relative flex items-center gap-3 rounded-2xl mx-2 transition cursor-pointer ${sidebarCollapsed ? 'justify-center px-0 py-2 bg-zinc-100 text-zinc-600 hover:bg-zinc-200' : 'px-4 py-2 bg-violet-100 text-violet-700 hover:bg-violet-200'}`}>
+              <span className={`inline-flex items-center justify-center rounded-xl ${sidebarCollapsed ? 'h-8 w-8 bg-white' : 'h-8 w-8 bg-violet-200'}`}>
+                <img src="/src/assets/intereses.svg" alt="Intereses" className="h-5 w-5" />
+              </span>
+              {!sidebarCollapsed && <span className="font-medium">Liquidación intereses en mora</span>}
               {sidebarCollapsed && (
                 <span className="pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded-md bg-zinc-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition">Liquidación</span>
               )}
@@ -284,10 +283,10 @@ export default function Calculator() {
 
         <div className="flex-1 p-0 md:p-0 flex flex-col">
           <header className="sticky top-0 z-30 bg-white/80 dark:bg-zinc-900/80 backdrop-blur border-b border-zinc-200 dark:border-zinc-800 px-4 md:px-8 py-3 flex items-center justify-between no-print">
-            <h1 className="text-xl md:text-2xl font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">Liquidación de intereses moratorios</h1>
+            <h1 className="text-xl md:text-2xl font-semibold text-violet-600">Liquidación de intereses moratorios</h1>
             <div className="relative flex items-center gap-2">
-              <button onClick={()=>setDark(d=>!d)} className="h-9 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition" aria-pressed={dark}>🌙</button>
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 text-white grid place-items-center text-sm font-semibold">U</div>
+              <button onClick={()=>setDark(d=>!d)} className="h-9 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer" aria-pressed={dark}>🌙</button>
+              <div className="h-8 w-8 rounded-full bg-violet-600 text-white grid place-items-center text-sm font-semibold cursor-pointer">U</div>
             </div>
           </header>
 
@@ -315,7 +314,7 @@ export default function Calculator() {
               <DatePicker valueDisplay={form.fechaVencimiento} onChange={(v)=>setForm(f=>({...f, fechaVencimiento: v}))} className="mt-1 w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition" />
             </div>
             <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-3 items-center">
-              <button type="submit" className="inline-flex items-center rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-600/90 hover:to-indigo-600/90 active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>{loading ? 'Calculando...' : 'Calcular'}</button>
+              <button type="submit" className="inline-flex items-center rounded-xl bg-violet-600 text-white hover:bg-violet-700 active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>{loading ? 'Calculando...' : 'Calcular'}</button>
               {data && (
                 <button type="button" onClick={exportExcel} className="inline-flex items-center rounded-xl bg-zinc-900 text-white hover:bg-black active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>Exportar a Excel</button>
               )}
