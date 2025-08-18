@@ -1507,7 +1507,7 @@ export default function HistoryAdvanced() {
                     </button>
                     
                     <button 
-                      onClick={() => navigate('/')}
+                      onClick={() => navigate('/interes-mora')}
                       className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
                     >
                       <img src={historialIcon} alt="Calculadora" className="w-4 h-4" />
@@ -1521,7 +1521,7 @@ export default function HistoryAdvanced() {
                       📊 Analytics
                     </button>
                     
-                    <button 
+                                        <button
                       onClick={logout}
                       className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
                     >

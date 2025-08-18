@@ -589,9 +589,9 @@ export default function Calculator() {
                     console.log('Toggle dropdown:', !showUserDropdown)
                     setShowUserDropdown(!showUserDropdown)
                   }}
-                  className="h-8 w-8 rounded-full bg-violet-600 text-white grid place-items-center text-sm font-semibold cursor-pointer hover:bg-violet-700 transition"
+                  className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold hover:from-blue-600 hover:to-purple-700 transition-all duration-200 animate-scaleIn"
                 >
-                  U
+                  {user?.email?.charAt(0).toUpperCase()}
                 </button>
                 
 {showUserDropdown && (
@@ -640,7 +640,9 @@ export default function Calculator() {
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3"
                       >
-                        <span>🚪</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
                         <span>Cerrar sesión</span>
                       </button>
                     </div>
