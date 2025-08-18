@@ -82,6 +82,10 @@ export default function Calculator() {
   const [showSaveDialog, setShowSaveDialog] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
+  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false)
+  const [templates, setTemplates] = useState([])
+  const [newTemplate, setNewTemplate] = useState({ name: '', description: '', isPublic: false })
   const tableWrapRef = useRef(null)
   const [tableScrolled, setTableScrolled] = useState(false)
   const userDropdownRef = useRef(null)
@@ -110,6 +114,11 @@ export default function Calculator() {
         // Cargar estado del sidebar
         const sidebarState = calculationsService.loadSidebarState()
         setSidebarCollapsed(sidebarState)
+
+        // Cargar plantillas disponibles
+        const templatesData = await calculationsService.getTemplates()
+        setTemplates(templatesData)
+
       } catch (error) {
         console.error('Error loading initial data:', error)
       }
@@ -395,6 +404,78 @@ export default function Calculator() {
     }
   }
 
+  // Funciones para manejar plantillas
+  const handleCreateTemplate = async () => {
+    if (!newTemplate.name.trim()) {
+      toast.error('Por favor ingresa un nombre para la plantilla')
+      return
+    }
+
+    try {
+      await calculationsService.createTemplate(
+        newTemplate.name,
+        newTemplate.description,
+        form,
+        newTemplate.isPublic
+      )
+      
+      // Recargar plantillas
+      const templatesData = await calculationsService.getTemplates()
+      setTemplates(templatesData)
+      
+      setShowCreateTemplateModal(false)
+      setNewTemplate({ name: '', description: '', isPublic: false })
+      
+      toast.success('Plantilla creada exitosamente', {
+        description: `"${newTemplate.name}" está disponible para usar`
+      })
+    } catch (error) {
+      console.error('Error creating template:', error)
+      toast.error('Error al crear plantilla', {
+        description: 'No se pudo crear la plantilla. Inténtalo de nuevo.'
+      })
+    }
+  }
+
+  const handleUseTemplate = async (template) => {
+    try {
+      const templateData = await calculationsService.useTemplate(template.id)
+      
+      // Cargar datos de la plantilla en el formulario
+      setForm(templateData.form_data)
+      
+      // Limpiar resultados previos
+      setData(null)
+      setError('')
+      
+      setShowTemplatesModal(false)
+      
+      toast.success('Plantilla aplicada', {
+        description: `Los datos de "${template.name}" se cargaron en el formulario`
+      })
+    } catch (error) {
+      console.error('Error using template:', error)
+      toast.error('Error al usar plantilla')
+    }
+  }
+
+  const handleDeleteTemplate = async (templateId) => {
+    if (!confirm('¿Eliminar esta plantilla?')) return
+
+    try {
+      await calculationsService.deleteTemplate(templateId)
+      
+      // Recargar plantillas
+      const templatesData = await calculationsService.getTemplates()
+      setTemplates(templatesData)
+      
+      toast.success('Plantilla eliminada')
+    } catch (error) {
+      console.error('Error deleting template:', error)
+      toast.error('Error al eliminar plantilla')
+    }
+  }
+
   const handleCancelSave = () => {
     setShowSaveDialog(false)
     setSaveName('')
@@ -541,6 +622,15 @@ export default function Calculator() {
                         <span>Historial</span>
                       </Link>
                       
+                      <Link
+                        to="/analytics"
+                        onClick={() => setShowUserDropdown(false)}
+                        className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
+                      >
+                        <span className="text-base">📊</span>
+                        <span>Analytics</span>
+                      </Link>
+                      
                       <div className="border-t border-zinc-200 dark:border-zinc-700 my-1"></div>
                       
                       <button
@@ -595,6 +685,14 @@ export default function Calculator() {
               )}
               <button type="button" onClick={handleLimpiar} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Limpiar</button>
               <button type="button" onClick={handleRellenarEjemplo} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Rellenar ejemplo</button>
+              <button type="button" onClick={() => setShowTemplatesModal(true)} className="inline-flex items-center rounded-xl bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/30 px-4 py-2 cursor-pointer">
+                📋 Plantillas
+              </button>
+              {data && (
+                <button type="button" onClick={() => setShowCreateTemplateModal(true)} className="inline-flex items-center rounded-xl bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/30 px-4 py-2 cursor-pointer">
+                  💾 Crear plantilla
+                </button>
+              )}
               {/* Botón de imprimir removido por solicitud */}
               <div className="flex items-center gap-3">
                 <span className="text-xs text-zinc-500">{saved === 'guardando' ? 'Guardando…' : saved === 'guardado' ? 'Guardado' : ''}</span>
@@ -754,6 +852,159 @@ export default function Calculator() {
                 className="px-4 py-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition"
               >
                 Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para ver plantillas */}
+      {showTemplatesModal && (
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto animate-scaleIn shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                Plantillas Disponibles
+              </h3>
+              <button
+                onClick={() => setShowTemplatesModal(false)}
+                className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            {templates.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-4">📋</div>
+                <p className="text-zinc-600 dark:text-zinc-400 mb-4">
+                  No hay plantillas disponibles
+                </p>
+                <button
+                  onClick={() => {
+                    setShowTemplatesModal(false)
+                    setShowCreateTemplateModal(true)
+                  }}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Crear primera plantilla
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {templates.map((template) => (
+                  <div
+                    key={template.id}
+                    className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-4 hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
+                  >
+                    <div className="flex justify-between items-start mb-3">
+                      <h4 className="font-medium text-zinc-900 dark:text-zinc-100">
+                        {template.name}
+                      </h4>
+                      {template.user_id && (
+                        <button
+                          onClick={() => handleDeleteTemplate(template.id)}
+                          className="text-red-500 hover:text-red-700 text-sm"
+                          title="Eliminar plantilla"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
+                    
+                    {template.description && (
+                      <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-3">
+                        {template.description}
+                      </p>
+                    )}
+                    
+                    <div className="flex justify-between items-center text-xs text-zinc-500 dark:text-zinc-400 mb-3">
+                      <span>Usos: {template.usage_count || 0}</span>
+                      {template.is_public && (
+                        <span className="bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 px-2 py-1 rounded">
+                          Pública
+                        </span>
+                      )}
+                    </div>
+                    
+                    <button
+                      onClick={() => handleUseTemplate(template)}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      Usar plantilla
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal para crear plantilla */}
+      {showCreateTemplateModal && (
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 w-full max-w-md mx-4 animate-scaleIn shadow-2xl">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+              Crear Plantilla
+            </h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                  Nombre de la plantilla
+                </label>
+                <input
+                  type="text"
+                  value={newTemplate.name}
+                  onChange={(e) => setNewTemplate(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Ej: Crédito hipotecario estándar"
+                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:text-zinc-100"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                  Descripción (opcional)
+                </label>
+                <textarea
+                  value={newTemplate.description}
+                  onChange={(e) => setNewTemplate(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe para qué sirve esta plantilla..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:text-zinc-100"
+                />
+              </div>
+              
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isPublic"
+                  checked={newTemplate.isPublic}
+                  onChange={(e) => setNewTemplate(prev => ({ ...prev, isPublic: e.target.checked }))}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="isPublic" className="ml-2 text-sm text-zinc-700 dark:text-zinc-300">
+                  Hacer pública (otros usuarios pueden usarla)
+                </label>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateTemplateModal(false)
+                  setNewTemplate({ name: '', description: '', isPublic: false })
+                }}
+                className="px-4 py-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateTemplate}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Crear plantilla
               </button>
             </div>
           </div>

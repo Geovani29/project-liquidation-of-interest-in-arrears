@@ -348,11 +348,30 @@ export class CalculationsService {
     }
 
     try {
+      // Extraer información del form_data para las nuevas columnas
+      let capitalAmount = null
+      let interestRate = null
+      
+      if (formData && typeof formData === 'object') {
+        // Extraer capital
+        if (formData.capitalBase) {
+          const cleanCapital = String(formData.capitalBase).replace(/[.,]/g, '')
+          capitalAmount = parseInt(cleanCapital) || null
+        }
+        
+        // Extraer tasa de interés
+        if (formData.tasaMensual) {
+          interestRate = parseFloat(formData.tasaMensual) || null
+        }
+      }
+
       const record = {
         user_id: this.userId,
         name: name.trim() || `Cálculo ${new Date().toLocaleDateString()}`,
         form_data: formData,
         result_data: resultData,
+        capital_amount: capitalAmount,
+        interest_rate: interestRate,
         is_template: false,
         is_public: false
       }
@@ -454,9 +473,10 @@ export class CalculationsService {
       // Obtener el cálculo original
       const original = await this.getCalculation(id)
       
-      // Crear copia
+      // Crear copia con el nuevo nombre
       const duplicateName = newName || `${original.name} (copia)`
       
+      // Usar saveCalculation que ya maneja las nuevas columnas
       return await this.saveCalculation(duplicateName, original.form_data, original.result_data)
     } catch (error) {
       console.error('Error duplicating calculation:', error)
@@ -508,6 +528,601 @@ export class CalculationsService {
     } catch (error) {
       console.error('Error searching calculations:', error)
       return []
+    }
+  }
+
+  // ===============================
+  // GESTIÓN DE ETIQUETAS (TAGS)
+  // ===============================
+
+  // Crear una nueva etiqueta
+  async createTag(name, color = '#3B82F6', description = '') {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .insert([{
+          user_id: this.userId,
+          name: name.trim(),
+          color,
+          description: description.trim()
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error creating tag:', error)
+      throw error
+    }
+  }
+
+  // Obtener todas las etiquetas del usuario
+  async getTags() {
+    if (!this.userId) return []
+
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .select('*')
+        .eq('user_id', this.userId)
+        .order('name')
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error getting tags:', error)
+      return []
+    }
+  }
+
+  // Actualizar una etiqueta
+  async updateTag(id, updates) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('tags')
+        .update(updates)
+        .eq('id', id)
+        .eq('user_id', this.userId)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error updating tag:', error)
+      throw error
+    }
+  }
+
+  // Eliminar una etiqueta
+  async deleteTag(id) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { error } = await supabase
+        .from('tags')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', this.userId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error deleting tag:', error)
+      throw error
+    }
+  }
+
+  // Agregar etiqueta a un cálculo
+  async addTagToCalculation(calculationId, tagId) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('calculation_tags')
+        .insert([{
+          calculation_id: calculationId,
+          tag_id: tagId
+        }])
+        .select()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error adding tag to calculation:', error)
+      throw error
+    }
+  }
+
+  // Remover etiqueta de un cálculo
+  async removeTagFromCalculation(calculationId, tagId) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { error } = await supabase
+        .from('calculation_tags')
+        .delete()
+        .eq('calculation_id', calculationId)
+        .eq('tag_id', tagId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error removing tag from calculation:', error)
+      throw error
+    }
+  }
+
+  // Obtener etiquetas de un cálculo
+  async getCalculationTags(calculationId) {
+    if (!this.userId) return []
+
+    try {
+      const { data, error } = await supabase
+        .from('calculation_tags')
+        .select(`
+          tag_id,
+          tags (
+            id,
+            name,
+            color,
+            description
+          )
+        `)
+        .eq('calculation_id', calculationId)
+
+      if (error) throw error
+      return data?.map(item => item.tags) || []
+    } catch (error) {
+      console.error('Error getting calculation tags:', error)
+      return []
+    }
+  }
+
+  // ===============================
+  // GESTIÓN DE CARPETAS
+  // ===============================
+
+  // Crear una nueva carpeta
+  async createFolder(name, description = '', parentId = null) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('folders')
+        .insert([{
+          user_id: this.userId,
+          name: name.trim(),
+          description: description.trim(),
+          parent_id: parentId
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error creating folder:', error)
+      throw error
+    }
+  }
+
+  // Obtener todas las carpetas del usuario
+  async getFolders() {
+    if (!this.userId) return []
+
+    try {
+      const { data, error } = await supabase
+        .from('folders')
+        .select('*')
+        .eq('user_id', this.userId)
+        .order('name')
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error getting folders:', error)
+      return []
+    }
+  }
+
+  // Actualizar una carpeta
+  async updateFolder(id, updates) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('folders')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .eq('user_id', this.userId)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error updating folder:', error)
+      throw error
+    }
+  }
+
+  // Eliminar una carpeta
+  async deleteFolder(id) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { error } = await supabase
+        .from('folders')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', this.userId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error deleting folder:', error)
+      throw error
+    }
+  }
+
+  // Mover cálculo a una carpeta
+  async moveCalculationToFolder(calculationId, folderId) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('calculations')
+        .update({ folder_id: folderId })
+        .eq('id', calculationId)
+        .eq('user_id', this.userId)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error moving calculation to folder:', error)
+      throw error
+    }
+  }
+
+  // ===============================
+  // GESTIÓN DE PLANTILLAS
+  // ===============================
+
+  // Crear una nueva plantilla
+  async createTemplate(name, description, formData, isPublic = false) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { data, error } = await supabase
+        .from('templates')
+        .insert([{
+          user_id: this.userId,
+          name: name.trim(),
+          description: description.trim(),
+          form_data: formData,
+          is_public: isPublic
+        }])
+        .select()
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error creating template:', error)
+      throw error
+    }
+  }
+
+  // Obtener plantillas del usuario y públicas
+  async getTemplates() {
+    if (!this.userId) return []
+
+    try {
+      const { data, error } = await supabase
+        .from('templates')
+        .select('*')
+        .or(`user_id.eq.${this.userId},is_public.eq.true`)
+        .order('usage_count', { ascending: false })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error getting templates:', error)
+      return []
+    }
+  }
+
+  // Usar una plantilla (incrementar contador)
+  async useTemplate(id) {
+    try {
+      const { data, error } = await supabase
+        .from('templates')
+        .select('*')
+        .eq('id', id)
+        .single()
+
+      if (error) throw error
+
+      // Incrementar contador de uso
+      await supabase
+        .from('templates')
+        .update({ usage_count: (data.usage_count || 0) + 1 })
+        .eq('id', id)
+
+      return data
+    } catch (error) {
+      console.error('Error using template:', error)
+      throw error
+    }
+  }
+
+  // Eliminar plantilla
+  async deleteTemplate(id) {
+    if (!this.userId) throw new Error('Usuario no autenticado')
+
+    try {
+      const { error } = await supabase
+        .from('templates')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', this.userId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error deleting template:', error)
+      throw error
+    }
+  }
+
+  // ===============================
+  // BÚSQUEDA Y FILTROS AVANZADOS
+  // ===============================
+
+  // Búsqueda avanzada de cálculos
+  async searchCalculationsAdvanced(filters = {}) {
+    if (!this.userId) return { data: [], count: 0 }
+
+    try {
+      let query = supabase
+        .from('calculations')
+        .select(`
+          *,
+          folder:folders(id, name),
+          calculation_tags(
+            tags(id, name, color)
+          )
+        `, { count: 'exact' })
+        .eq('user_id', this.userId)
+        .not('name', 'like', 'temp_%')
+
+      // Filtro por texto
+      if (filters.query) {
+        query = query.or(`name.ilike.%${filters.query}%,description.ilike.%${filters.query}%`)
+      }
+
+      // Filtro por carpeta
+      if (filters.folderId) {
+        query = query.eq('folder_id', filters.folderId)
+      }
+
+      // Filtro por rango de fechas
+      if (filters.dateFrom) {
+        query = query.gte('created_at', filters.dateFrom)
+      }
+      if (filters.dateTo) {
+        query = query.lte('created_at', filters.dateTo)
+      }
+
+      // Filtro por rango de capital
+      if (filters.capitalMin) {
+        query = query.gte('capital_amount', filters.capitalMin)
+      }
+      if (filters.capitalMax) {
+        query = query.lte('capital_amount', filters.capitalMax)
+      }
+
+      // Filtro por tasa de interés
+      if (filters.rateMin) {
+        query = query.gte('interest_rate', filters.rateMin)
+      }
+      if (filters.rateMax) {
+        query = query.lte('interest_rate', filters.rateMax)
+      }
+
+      // Ordenamiento
+      const orderBy = filters.orderBy || 'created_at'
+      const ascending = filters.orderDirection === 'asc'
+      query = query.order(orderBy, { ascending })
+
+      // Paginación
+      const limit = filters.limit || 50
+      const offset = filters.offset || 0
+      query = query.range(offset, offset + limit - 1)
+
+      const { data, error, count } = await query
+
+      if (error) throw error
+
+      return { data: data || [], count: count || 0 }
+    } catch (error) {
+      console.error('Error in advanced search:', error)
+      return { data: [], count: 0 }
+    }
+  }
+
+  // Filtrar por etiquetas
+  async getCalculationsByTags(tagIds, limit = 50) {
+    if (!this.userId || !tagIds.length) return []
+
+    try {
+      const { data, error } = await supabase
+        .from('calculation_tags')
+        .select(`
+          calculation_id,
+          calculations(
+            *,
+            folder:folders(id, name),
+            calculation_tags(
+              tags(id, name, color)
+            )
+          )
+        `)
+        .in('tag_id', tagIds)
+        .limit(limit)
+
+      if (error) throw error
+
+      // Eliminar duplicados y extraer cálculos
+      const uniqueCalculations = []
+      const seen = new Set()
+
+      data?.forEach(item => {
+        if (item.calculations && !seen.has(item.calculations.id)) {
+          seen.add(item.calculations.id)
+          uniqueCalculations.push(item.calculations)
+        }
+      })
+
+      return uniqueCalculations
+    } catch (error) {
+      console.error('Error getting calculations by tags:', error)
+      return []
+    }
+  }
+
+  // ===============================
+  // ESTADÍSTICAS Y ANALYTICS
+  // ===============================
+
+  // Obtener estadísticas del usuario
+  async getUserStatistics() {
+    if (!this.userId) return null
+
+    try {
+      const { data, error } = await supabase
+        .from('user_statistics')
+        .select('*')
+        .eq('user_id', this.userId)
+        .single()
+
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error getting user statistics:', error)
+      return null
+    }
+  }
+
+  // Obtener estadísticas por período
+  async getStatisticsByPeriod(period = 'month') {
+    if (!this.userId) return []
+
+    try {
+      let dateFormat
+      switch (period) {
+        case 'day':
+          dateFormat = 'YYYY-MM-DD'
+          break
+        case 'week':
+          dateFormat = 'YYYY-"W"WW'
+          break
+        case 'month':
+          dateFormat = 'YYYY-MM'
+          break
+        case 'year':
+          dateFormat = 'YYYY'
+          break
+        default:
+          dateFormat = 'YYYY-MM'
+      }
+
+      const { data, error } = await supabase
+        .rpc('get_calculations_by_period', {
+          p_user_id: this.userId,
+          p_date_format: dateFormat
+        })
+
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('Error getting statistics by period:', error)
+      return []
+    }
+  }
+
+  // ===============================
+  // ACCIONES EN LOTE
+  // ===============================
+
+  // Eliminar múltiples cálculos
+  async deleteCalculationsInBatch(calculationIds) {
+    if (!this.userId || !calculationIds.length) return false
+
+    try {
+      const { error } = await supabase
+        .from('calculations')
+        .delete()
+        .in('id', calculationIds)
+        .eq('user_id', this.userId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error deleting calculations in batch:', error)
+      throw error
+    }
+  }
+
+  // Mover múltiples cálculos a una carpeta
+  async moveCalculationsToFolderInBatch(calculationIds, folderId) {
+    if (!this.userId || !calculationIds.length) return false
+
+    try {
+      const { error } = await supabase
+        .from('calculations')
+        .update({ folder_id: folderId })
+        .in('id', calculationIds)
+        .eq('user_id', this.userId)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error moving calculations to folder in batch:', error)
+      throw error
+    }
+  }
+
+  // Agregar etiqueta a múltiples cálculos
+  async addTagToCalculationsInBatch(calculationIds, tagId) {
+    if (!this.userId || !calculationIds.length) return false
+
+    try {
+      const insertData = calculationIds.map(calcId => ({
+        calculation_id: calcId,
+        tag_id: tagId
+      }))
+
+      const { error } = await supabase
+        .from('calculation_tags')
+        .insert(insertData)
+
+      if (error) throw error
+      return true
+    } catch (error) {
+      console.error('Error adding tag to calculations in batch:', error)
+      throw error
     }
   }
 

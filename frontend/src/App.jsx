@@ -6,7 +6,8 @@ import ForgotPassword from './pages/ForgotPassword.jsx'
 import ResetPassword from './pages/ResetPassword.jsx'
 import VerifyEmail from './pages/VerifyEmail.jsx'
 import Calculator from './pages/Calculator.jsx'
-import History from './pages/History.jsx'
+import HistoryAdvanced from './pages/HistoryAdvanced.jsx'
+import Analytics from './pages/Analytics.jsx'
 import Home from './pages/Home.jsx'
 
 function ProtectedRoute({ children }) {
@@ -23,7 +24,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/interes-mora" element={<ProtectedRoute><Calculator /></ProtectedRoute>} />
-          <Route path="/historial" element={<ProtectedRoute><History /></ProtectedRoute>} />
+          <Route path="/historial" element={<ProtectedRoute><HistoryAdvanced /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
