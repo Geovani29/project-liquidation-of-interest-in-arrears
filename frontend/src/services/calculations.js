@@ -338,6 +338,180 @@ export class CalculationsService {
   }
 
   // ===============================
+  // GESTIÓN DE CÁLCULOS GUARDADOS
+  // ===============================
+
+  // Guardar un cálculo permanentemente con nombre
+  async saveCalculation(name, formData, resultData) {
+    if (!this.userId) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    try {
+      const record = {
+        user_id: this.userId,
+        name: name.trim() || `Cálculo ${new Date().toLocaleDateString()}`,
+        form_data: formData,
+        result_data: resultData,
+        is_template: false,
+        is_public: false
+      }
+
+      const { data, error } = await supabase
+        .from('calculations')
+        .insert([record])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      return data
+    } catch (error) {
+      console.error('Error saving calculation:', error)
+      throw error
+    }
+  }
+
+  // Obtener lista de cálculos guardados del usuario
+  async getCalculations(limit = 50, offset = 0) {
+    if (!this.userId) {
+      return { data: [], count: 0 }
+    }
+
+    try {
+      // Obtener cálculos no temporales
+      const { data, error, count } = await supabase
+        .from('calculations')
+        .select('*', { count: 'exact' })
+        .eq('user_id', this.userId)
+        .not('name', 'like', 'temp_%')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1)
+
+      if (error) throw error
+
+      return { data: data || [], count: count || 0 }
+    } catch (error) {
+      console.error('Error getting calculations:', error)
+      return { data: [], count: 0 }
+    }
+  }
+
+  // Obtener un cálculo específico por ID
+  async getCalculation(id) {
+    if (!this.userId) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('calculations')
+        .select('*')
+        .eq('id', id)
+        .eq('user_id', this.userId) // Seguridad: solo cálculos del usuario
+        .single()
+
+      if (error) throw error
+
+      return data
+    } catch (error) {
+      console.error('Error getting calculation:', error)
+      throw error
+    }
+  }
+
+  // Actualizar nombre de un cálculo
+  async updateCalculationName(id, newName) {
+    if (!this.userId) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('calculations')
+        .update({ name: newName.trim() })
+        .eq('id', id)
+        .eq('user_id', this.userId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      return data
+    } catch (error) {
+      console.error('Error updating calculation name:', error)
+      throw error
+    }
+  }
+
+  // Duplicar un cálculo
+  async duplicateCalculation(id, newName = null) {
+    if (!this.userId) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    try {
+      // Obtener el cálculo original
+      const original = await this.getCalculation(id)
+      
+      // Crear copia
+      const duplicateName = newName || `${original.name} (copia)`
+      
+      return await this.saveCalculation(duplicateName, original.form_data, original.result_data)
+    } catch (error) {
+      console.error('Error duplicating calculation:', error)
+      throw error
+    }
+  }
+
+  // Eliminar un cálculo
+  async deleteCalculation(id) {
+    if (!this.userId) {
+      throw new Error('Usuario no autenticado')
+    }
+
+    try {
+      const { error } = await supabase
+        .from('calculations')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', this.userId) // Seguridad: solo cálculos del usuario
+
+      if (error) throw error
+
+      return true
+    } catch (error) {
+      console.error('Error deleting calculation:', error)
+      throw error
+    }
+  }
+
+  // Buscar cálculos por nombre
+  async searchCalculations(query, limit = 20) {
+    if (!this.userId || !query.trim()) {
+      return []
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('calculations')
+        .select('*')
+        .eq('user_id', this.userId)
+        .not('name', 'like', 'temp_%')
+        .ilike('name', `%${query.trim()}%`)
+        .order('created_at', { ascending: false })
+        .limit(limit)
+
+      if (error) throw error
+
+      return data || []
+    } catch (error) {
+      console.error('Error searching calculations:', error)
+      return []
+    }
+  }
+
+  // ===============================
   // ESTADO DEL SERVICIO
   // ===============================
 

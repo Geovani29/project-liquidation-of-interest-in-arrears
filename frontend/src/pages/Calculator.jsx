@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSession } from '../auth/SessionContext'
 import { api } from '../api/client'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { calculationsService } from '../services/calculations'
+import perfilIcon from '../assets/perfil.svg'
+import historialIcon from '../assets/historial.svg'
 
 const DATE_FMT = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
 
@@ -61,7 +63,7 @@ function DatePicker({ valueDisplay, onChange, className, disabled }) {
 }
 
 export default function Calculator() {
-  const { logout } = useSession()
+  const { logout, user } = useSession()
   const navigate = useNavigate()
   const [form, setForm] = useState({
     fechaInicial: '',
@@ -77,8 +79,12 @@ export default function Calculator() {
   const [dark, setDark] = useState(false)
   const [saved, setSaved] = useState('')
   const [syncStatus, setSyncStatus] = useState('idle') // idle, syncing, synced, error, offline
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
   const tableWrapRef = useRef(null)
   const [tableScrolled, setTableScrolled] = useState(false)
+  const userDropdownRef = useRef(null)
   const handleLogout = () => {
     logout()
     toast.success('Sesión cerrada')
@@ -110,6 +116,38 @@ export default function Calculator() {
     }
 
     loadInitialData()
+  }, [])
+
+  // Cargar cálculo desde historial si está disponible
+  useEffect(() => {
+    const loadFromHistory = () => {
+      try {
+        const stored = localStorage.getItem('load_calculation')
+        if (stored) {
+          const calculation = JSON.parse(stored)
+          
+          // Cargar datos del formulario
+          if (calculation.form_data) {
+            setForm(calculation.form_data)
+          }
+          
+          // Cargar resultados si existen
+          if (calculation.result_data) {
+            setData(calculation.result_data)
+          }
+          
+          // Limpiar el localStorage para que no se cargue de nuevo
+          localStorage.removeItem('load_calculation')
+          
+          toast.success(`Cálculo "${calculation.name}" cargado`)
+        }
+      } catch (error) {
+        console.error('Error loading calculation from history:', error)
+        localStorage.removeItem('load_calculation')
+      }
+    }
+
+    loadFromHistory()
   }, [])
 
   // Monitorear estado de sincronización
@@ -146,6 +184,31 @@ export default function Calculator() {
       clearInterval(interval)
     }
   }, [])
+
+  // Cerrar dropdown de usuario al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false)
+      }
+    }
+
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setShowUserDropdown(false)
+      }
+    }
+
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [showUserDropdown])
 
   useEffect(() => {
     const root = document.documentElement
@@ -295,6 +358,48 @@ export default function Calculator() {
     })
   }
 
+  const handleSaveCalculation = () => {
+    if (!data) {
+      toast.error('Primero debes calcular para poder guardar')
+      return
+    }
+    
+    // Generar nombre por defecto basado en los datos del formulario
+    const defaultName = `Liquidación ${form.capitalBase ? formatCurrency(Number(String(form.capitalBase).replace(/[^0-9]/g, ''))) : ''} - ${new Date().toLocaleDateString()}`
+    setSaveName(defaultName)
+    setShowSaveDialog(true)
+  }
+
+  const handleConfirmSave = async () => {
+    if (!saveName.trim()) {
+      toast.error('Ingresa un nombre para el cálculo')
+      return
+    }
+
+    try {
+      await calculationsService.saveCalculation(saveName, form, data)
+      toast.success('Cálculo guardado exitosamente')
+      setShowSaveDialog(false)
+      setSaveName('')
+    } catch (error) {
+      console.error('Error saving calculation:', error)
+      toast.error('Error guardando cálculo')
+    }
+  }
+
+  const handleCancelSave = () => {
+    setShowSaveDialog(false)
+    setSaveName('')
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      maximumFractionDigits: 0
+    }).format(amount || 0)
+  }
+
   // Componente para mostrar estado de sincronización
   const SyncIndicator = () => {
     const getIndicator = () => {
@@ -358,6 +463,8 @@ export default function Calculator() {
                 <span className="pointer-events-none absolute left-full ml-2 whitespace-nowrap rounded-md bg-zinc-900 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition">Liquidación</span>
               )}
             </a>
+
+
           </nav>
 
           <div className="mt-auto p-3">
@@ -385,7 +492,63 @@ export default function Calculator() {
             <h1 className="text-xl md:text-2xl font-semibold text-violet-600">Liquidación de intereses moratorios</h1>
             <div className="relative flex items-center gap-2">
               <button onClick={()=>setDark(d=>!d)} className="h-9 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition cursor-pointer" aria-pressed={dark}>🌙</button>
-              <div className="h-8 w-8 rounded-full bg-violet-600 text-white grid place-items-center text-sm font-semibold cursor-pointer">U</div>
+              
+              {/* Dropdown de usuario */}
+              <div className="relative" ref={userDropdownRef}>
+                <button 
+                  onClick={() => {
+                    console.log('Toggle dropdown:', !showUserDropdown)
+                    setShowUserDropdown(!showUserDropdown)
+                  }}
+                  className="h-8 w-8 rounded-full bg-violet-600 text-white grid place-items-center text-sm font-semibold cursor-pointer hover:bg-violet-700 transition"
+                >
+                  U
+                </button>
+                
+{showUserDropdown && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-zinc-800 rounded-xl shadow-lg border border-zinc-200 dark:border-zinc-700 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Usuario</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">{user?.email || 'Usuario'}</p>
+                    </div>
+                    
+                    <div className="py-1">
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false)
+                          toast.info('Función en desarrollo')
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
+                      >
+                        <img src={perfilIcon} alt="Perfil" className="h-4 w-4" />
+                        <span>Perfil</span>
+                      </button>
+                      
+                      <Link
+                        to="/historial"
+                        onClick={() => setShowUserDropdown(false)}
+                        className="w-full px-4 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-3"
+                      >
+                        <img src={historialIcon} alt="Historial" className="h-4 w-4" />
+                        <span>Historial</span>
+                      </Link>
+                      
+                      <div className="border-t border-zinc-200 dark:border-zinc-700 my-1"></div>
+                      
+                      <button
+                        onClick={() => {
+                          setShowUserDropdown(false)
+                          handleLogout()
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3"
+                      >
+                        <span>🚪</span>
+                        <span>Cerrar sesión</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -415,7 +578,12 @@ export default function Calculator() {
             <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-3 items-center">
               <button type="submit" className="inline-flex items-center rounded-xl bg-violet-600 text-white hover:bg-violet-700 active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>{loading ? 'Calculando...' : 'Calcular'}</button>
               {data && (
-                <button type="button" onClick={exportExcel} className="inline-flex items-center rounded-xl bg-zinc-900 text-white hover:bg-black active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>Exportar a Excel</button>
+                <>
+                  <button type="button" onClick={handleSaveCalculation} className="inline-flex items-center rounded-xl bg-green-600 text-white hover:bg-green-700 active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer">
+                    💾 Guardar cálculo
+                  </button>
+                  <button type="button" onClick={exportExcel} className="inline-flex items-center rounded-xl bg-zinc-900 text-white hover:bg-black active:scale-[.99] transition shadow-sm px-5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" disabled={loading}>Exportar a Excel</button>
+                </>
               )}
               <button type="button" onClick={handleLimpiar} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Limpiar</button>
               <button type="button" onClick={handleRellenarEjemplo} className="inline-flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600 px-4 py-2 cursor-pointer">Rellenar ejemplo</button>
@@ -496,6 +664,46 @@ export default function Calculator() {
           </div>
         </div>
       </div>
+
+      {/* Modal para guardar cálculo */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-800 rounded-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+              Guardar Cálculo
+            </h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-zinc-600 dark:text-zinc-300 mb-2">
+                Nombre del cálculo
+              </label>
+              <input
+                type="text"
+                value={saveName}
+                onChange={(e) => setSaveName(e.target.value)}
+                className="w-full rounded-xl border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 px-3 py-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500"
+                placeholder="Ej: Liquidación Cliente ABC"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelSave}
+                className="px-4 py-2 border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-700 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                className="px-4 py-2 bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
