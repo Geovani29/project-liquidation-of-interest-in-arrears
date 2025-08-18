@@ -36,6 +36,39 @@ export function SessionProvider({ children }) {
     localStorage.setItem('auth_storage', remember ? 'local' : 'session')
   }, [remember])
 
+  // Recuperar sesión al cargar la página
+  useEffect(() => {
+    const loadSession = async () => {
+      try {
+        const authStorage = localStorage.getItem('auth_storage') || 'session'
+        const storage = authStorage === 'local' ? localStorage : sessionStorage
+        setRemember(authStorage === 'local')
+        
+        const savedAccessToken = storage.getItem('accessToken')
+        const savedRefreshToken = storage.getItem('refreshToken')
+        
+        if (savedAccessToken && savedRefreshToken) {
+          setAccessToken(savedAccessToken)
+          setRefreshToken(savedRefreshToken)
+          
+          // Aquí podrías verificar el token o decodificar info del usuario
+          // Por ahora, vamos a obtener el usuario desde Supabase si es posible
+          const email = localStorage.getItem('user_email') // Necesitamos guardar esto también
+          if (email) {
+            const supUserId = await getSupabaseUserId(email, email)
+            setSupabaseUserId(supUserId)
+            setUser({ email, id: supUserId })
+            calculationsService.setUser(supUserId)
+          }
+        }
+      } catch (error) {
+        console.error('Error loading session:', error)
+      }
+    }
+    
+    loadSession()
+  }, [])
+
   const login = async (email, password) => {
     const tokens = await loginApi(email, password)
     setAccessToken(tokens.accessToken)
@@ -47,6 +80,9 @@ export function SessionProvider({ children }) {
       const supUserId = await getSupabaseUserId(email, email) // usamos email como roble_user_id por ahora
       setSupabaseUserId(supUserId)
       setUser({ email, id: supUserId })
+      
+      // Guardar email para recuperar sesión
+      localStorage.setItem('user_email', email)
       
       // Configurar el servicio de cálculos con el usuario
       calculationsService.setUser(supUserId)
@@ -64,6 +100,9 @@ export function SessionProvider({ children }) {
     setRefreshToken(null)
     setUser(null)
     setSupabaseUserId(null)
+    
+    // Limpiar email guardado
+    localStorage.removeItem('user_email')
     
     try {
       // Limpiar datos usando el servicio de cálculos

@@ -914,7 +914,11 @@ export class CalculationsService {
 
       // Filtro por carpeta
       if (filters.folderId) {
-        query = query.eq('folder_id', filters.folderId)
+        if (filters.folderId === 'none') {
+          query = query.is('folder_id', null)
+        } else {
+          query = query.eq('folder_id', filters.folderId)
+        }
       }
 
       // Filtro por rango de fechas

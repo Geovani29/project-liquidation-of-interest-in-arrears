@@ -10,7 +10,7 @@ import perfilIcon from '../assets/perfil.svg'
 import historialIcon from '../assets/historial.svg'
 
 export default function HistoryAdvanced() {
-  const { user, logout } = useSession()
+  const { user, logout, supabaseUserId } = useSession()
   const navigate = useNavigate()
   
   // Estados principales
@@ -29,8 +29,20 @@ export default function HistoryAdvanced() {
   const [tags, setTags] = useState([])
   const [selectedCalculations, setSelectedCalculations] = useState([])
   const [showBatchActions, setShowBatchActions] = useState(false)
+  
+  // Estados para drag & drop
+  const [draggedCalculation, setDraggedCalculation] = useState(null)
+  const [dragOverFolder, setDragOverFolder] = useState(null)
+  
+  // Estados para vista de carpeta específica
+  const [viewingFolder, setViewingFolder] = useState(null) // null = vista principal, folderId = vista de carpeta específica
+  const [folderCalculations, setFolderCalculations] = useState([]) // cálculos de la carpeta actual
   const [showCreateTag, setShowCreateTag] = useState(false)
   const [showCreateFolder, setShowCreateFolder] = useState(false)
+  const [editingFolderId, setEditingFolderId] = useState(null)
+  const [editingFolderName, setEditingFolderName] = useState('')
+  const [showMoveModal, setShowMoveModal] = useState(false)
+  const [movingCalculationId, setMovingCalculationId] = useState(null)
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState({
@@ -61,8 +73,10 @@ export default function HistoryAdvanced() {
 
   // Cargar datos iniciales
   useEffect(() => {
-    loadInitialData()
-  }, [])
+    if (user && supabaseUserId) {
+      loadInitialData()
+    }
+  }, [user, supabaseUserId])
 
   // Búsqueda y filtros en tiempo real
   useEffect(() => {
@@ -101,6 +115,11 @@ export default function HistoryAdvanced() {
   // Cargar datos iniciales
   const loadInitialData = async () => {
     try {
+      // Asegurar que el servicio esté configurado con el usuario actual
+      if (supabaseUserId) {
+        calculationsService.setUser(supabaseUserId)
+      }
+      
       const [foldersData, tagsData] = await Promise.all([
         calculationsService.getFolders(),
         calculationsService.getTags()
@@ -109,8 +128,361 @@ export default function HistoryAdvanced() {
       setTags(tagsData)
     } catch (error) {
       console.error('Error loading initial data:', error)
+      toast.error('Error al cargar datos')
+    } finally {
+      // Siempre cargar cálculos al final
+      loadCalculations()
     }
+  }
+
+  // Función para refrescar todos los datos
+  const refreshAllData = async () => {
+    try {
+      const [foldersData, tagsData] = await Promise.all([
+        calculationsService.getFolders(),
+        calculationsService.getTags(),
+        loadCalculations()
+      ])
+      setFolders(foldersData)
+      setTags(tagsData)
+      
+      // Si estamos viendo una carpeta específica, recargar sus cálculos
+      if (viewingFolder) {
+        await loadFolderCalculations(viewingFolder)
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error)
+      toast.error('Error al actualizar datos')
+    }
+  }
+
+  // Cargar cálculos de una carpeta específica
+  const loadFolderCalculations = async (folderId) => {
+    setLoading(true)
+    try {
+      const result = await calculationsService.searchCalculationsAdvanced({
+        folderId: folderId === 'none' ? null : folderId,
+        limit: 1000 // Cargar todos los de la carpeta
+      })
+      
+      setFolderCalculations(result.data)
+    } catch (error) {
+      console.error('Error loading folder calculations:', error)
+      toast.error('Error al cargar cálculos de la carpeta')
+      setFolderCalculations([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Cambiar a vista de carpeta específica
+  const viewFolder = async (folderId) => {
+    setViewingFolder(folderId)
+    await loadFolderCalculations(folderId)
+  }
+
+  // Volver a la vista principal
+  const backToMainView = () => {
+    setViewingFolder(null)
+    setFolderCalculations([])
     loadCalculations()
+  }
+
+  // Funciones para drag & drop
+  const handleDragStart = (e, calculation) => {
+    setDraggedCalculation(calculation)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/html', e.target.outerHTML)
+  }
+
+  const handleDragEnd = () => {
+    setDraggedCalculation(null)
+    setDragOverFolder(null)
+  }
+
+  const handleDragOver = (e, folderId = null) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDragOverFolder(folderId)
+  }
+
+  const handleDragLeave = () => {
+    setDragOverFolder(null)
+  }
+
+  const handleDrop = async (e, folderId = null) => {
+    e.preventDefault()
+    
+    if (!draggedCalculation) return
+    
+    // No hacer nada si se suelta en la misma carpeta
+    if (draggedCalculation.folder_id === folderId) {
+      setDraggedCalculation(null)
+      setDragOverFolder(null)
+      return
+    }
+
+    try {
+      await calculationsService.moveCalculationToFolder(draggedCalculation.id, folderId)
+      
+      // Actualizar estado local
+      setCalculations(prev => 
+        prev.map(calc => 
+          calc.id === draggedCalculation.id 
+            ? { 
+                ...calc, 
+                folder_id: folderId,
+                folder: folderId ? folders.find(f => f.id === folderId) : null
+              } 
+            : calc
+        )
+      )
+
+      const targetName = folderId ? folders.find(f => f.id === folderId)?.name : 'Sin carpeta'
+      toast.success('Cálculo movido', {
+        description: `"${draggedCalculation.name}" se movió a "${targetName}".`
+      })
+
+      // Refrescar datos para asegurar sincronización
+      if (viewingFolder) {
+        await loadFolderCalculations(viewingFolder)
+      } else {
+        await refreshAllData()
+      }
+      
+    } catch (error) {
+      console.error('Error moving calculation:', error)
+      toast.error('Error al mover cálculo')
+    } finally {
+      setDraggedCalculation(null)
+      setDragOverFolder(null)
+    }
+  }
+
+  // Renderizar vista de carpeta específica (en pila)
+  const renderFolderView = () => {
+    const currentFolder = viewingFolder === 'none' ? { name: 'Sin carpeta', id: 'none' } : folders.find(f => f.id === viewingFolder)
+    
+    return (
+      <div className="flex gap-6">
+        {/* Sidebar con carpetas para mover archivos */}
+        <div className="w-64 bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4 h-fit">
+          <h3 className="font-medium text-zinc-900 dark:text-zinc-100 mb-3 flex items-center gap-2">
+            📁 Mover a:
+          </h3>
+          
+          <div className="space-y-1">
+            {/* Rama principal */}
+            <div 
+              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
+                dragOverFolder === '' 
+                  ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
+                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+              }`}
+              onDragOver={(e) => handleDragOver(e, '')}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, '')}
+            >
+              <span className="text-blue-500">🌳</span>
+              <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">
+                Rama principal
+              </span>
+            </div>
+
+            {/* Sin carpeta */}
+            <div 
+              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
+                dragOverFolder === null 
+                  ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
+                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+              }`}
+              onDragOver={(e) => handleDragOver(e, null)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, null)}
+            >
+              <span className="text-zinc-400">📄</span>
+              <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">
+                Sin carpeta
+              </span>
+            </div>
+
+            {/* Otras carpetas */}
+            {folders.filter(f => f.id !== viewingFolder).map(folder => (
+              <div 
+                key={folder.id}
+                className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
+                  dragOverFolder === folder.id 
+                    ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
+                    : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                }`}
+                onDragOver={(e) => handleDragOver(e, folder.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, folder.id)}
+              >
+                <span className="text-yellow-500">📁</span>
+                <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 truncate">
+                  {folder.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Contenido principal */}
+        <div className="flex-1 space-y-6">
+          {/* Header de carpeta */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={backToMainView}
+                className="flex items-center gap-2 px-3 py-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+              >
+                ← Regresar
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{viewingFolder === 'none' ? '📄' : '📁'}</span>
+                <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+                  {currentFolder?.name || 'Carpeta no encontrada'}
+                </h2>
+                <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                  ({folderCalculations.length} archivo{folderCalculations.length !== 1 ? 's' : ''})
+                </span>
+              </div>
+            </div>
+          </div>
+
+        {/* Lista de archivos en pila */}
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-white dark:bg-zinc-800 rounded-lg p-4 animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-zinc-200 dark:bg-zinc-700 rounded"></div>
+                  <div className="flex-1">
+                    <div className="w-3/4 h-4 bg-zinc-200 dark:bg-zinc-700 rounded mb-2"></div>
+                    <div className="w-1/2 h-3 bg-zinc-200 dark:bg-zinc-700 rounded"></div>
+                  </div>
+                  <div className="w-20 h-8 bg-zinc-200 dark:bg-zinc-700 rounded"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : folderCalculations.length === 0 ? (
+          <div className="text-center py-12 text-zinc-500 dark:text-zinc-400">
+            <div className="text-4xl mb-4">📄</div>
+            <p className="text-lg mb-2">Esta carpeta está vacía</p>
+            <p className="text-sm">Arrastra archivos aquí o crea nuevos cálculos</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {folderCalculations.map((calculation, index) => (
+              <div
+                key={calculation.id}
+                draggable
+                onDragStart={(e) => handleDragStart(e, calculation)}
+                onDragEnd={handleDragEnd}
+                className={`group bg-white dark:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 p-4 hover:shadow-md transition-all cursor-move ${
+                  draggedCalculation?.id === calculation.id ? 'opacity-50 scale-95' : ''
+                }`}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <div className="flex items-center gap-3">
+                  {/* Icono de archivo */}
+                  <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <span className="text-blue-600 dark:text-blue-400 text-sm">📊</span>
+                  </div>
+
+                  {/* Información del archivo */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                      {calculation.name}
+                    </h3>
+                    <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 mt-1">
+                      <span>
+                        {new Date(calculation.created_at).toLocaleDateString('es-ES')}
+                      </span>
+                      {calculation.capital_amount && (
+                        <span>
+                          Capital: ${Number(calculation.capital_amount).toLocaleString('es-ES')}
+                        </span>
+                      )}
+                      {calculation.total_interest && (
+                        <span>
+                          Interés: ${Number(calculation.total_interest).toLocaleString('es-ES')}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Etiquetas */}
+                    {calculation.calculation_tags?.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {calculation.calculation_tags.map((tagRelation) => (
+                          <span
+                            key={tagRelation.tags.id}
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded group/tag hover:bg-opacity-30 transition-all cursor-pointer"
+                            style={{
+                              backgroundColor: tagRelation.tags.color + '20',
+                              color: tagRelation.tags.color
+                            }}
+                          >
+                            {tagRelation.tags.name}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRemoveTagFromCalculation(calculation.id, tagRelation.tags.id)
+                              }}
+                              className="opacity-0 group-hover/tag:opacity-100 text-xs hover:bg-red-500 hover:text-white w-4 h-4 rounded-full flex items-center justify-center transition-all ml-1"
+                              title="Eliminar etiqueta"
+                            >
+                              ✕
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Acciones */}
+                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                    <button
+                      onClick={() => {
+                        setEditingId(calculation.id)
+                        setEditingName(calculation.name)
+                      }}
+                      className="p-2 text-zinc-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full cursor-pointer transition-all"
+                      title="Editar nombre"
+                    >
+                      <img src={editarIcon} alt="Editar" className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDuplicate(calculation.id)}
+                      className="p-2 text-zinc-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full cursor-pointer transition-all"
+                      title="Duplicar"
+                    >
+                      <img src={copiarIcon} alt="Copiar" className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(calculation.id)}
+                      className="p-2 text-zinc-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full cursor-pointer transition-all"
+                      title="Eliminar"
+                    >
+                      <img src={eliminarIcon} alt="Eliminar" className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleLoadCalculation(calculation)}
+                      className="px-3 py-1 text-xs bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors cursor-pointer"
+                    >
+                      Cargar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        </div>
+      </div>
+    )
   }
 
   // Cargar cálculos con filtros
@@ -123,13 +495,25 @@ export default function HistoryAdvanced() {
       }
 
       const result = await calculationsService.searchCalculationsAdvanced(searchFilters)
-      setCalculations(result.data)
+      
+      // Asegurar que los datos tengan la estructura correcta
+      const processedData = result.data.map(calc => ({
+        ...calc,
+        folder_id: calc.folder_id || null,
+        folder: calc.folder || null,
+        calculation_tags: calc.calculation_tags || []
+      }))
+      
+      setCalculations(processedData)
       setTotalCount(result.count)
     } catch (error) {
       console.error('Error loading calculations:', error)
       toast.error('Error al cargar cálculos', {
         description: 'No se pudieron cargar los cálculos. Inténtalo de nuevo.'
       })
+      // En caso de error, limpiar datos para evitar estado inconsistente
+      setCalculations([])
+      setTotalCount(0)
     } finally {
       setLoading(false)
     }
@@ -182,6 +566,152 @@ export default function HistoryAdvanced() {
       toast.error('Error al crear carpeta', {
         description: 'No se pudo crear la carpeta. Inténtalo de nuevo.'
       })
+    }
+  }
+
+  // Editar nombre de carpeta
+  const handleEditFolder = async (folderId, newName) => {
+    if (!newName.trim()) return
+
+    try {
+      await calculationsService.updateFolder(folderId, { name: newName.trim() })
+      setFolders(prev => 
+        prev.map(folder => 
+          folder.id === folderId ? { ...folder, name: newName.trim() } : folder
+        )
+      )
+      setEditingFolderId(null)
+      setEditingFolderName('')
+      toast.success('Carpeta actualizada', {
+        description: 'El nombre de la carpeta se actualizó correctamente.'
+      })
+    } catch (error) {
+      console.error('Error updating folder:', error)
+      toast.error('Error al actualizar carpeta')
+    }
+  }
+
+  // Eliminar carpeta
+  const handleDeleteFolder = async (folderId) => {
+    const folder = folders.find(f => f.id === folderId)
+    if (!folder) return
+
+    // Contar cálculos en esta carpeta
+    const calculationsInFolder = calculations.filter(calc => calc.folder_id === folderId).length
+
+    let confirmMessage
+    if (calculationsInFolder === 0) {
+      confirmMessage = `¿Eliminar la carpeta "${folder.name}"?\n\nLa carpeta está vacía y se eliminará permanentemente.`
+    } else {
+      confirmMessage = `¿Eliminar la carpeta "${folder.name}"?\n\nEsta carpeta contiene ${calculationsInFolder} cálculo(s) guardado(s).\nAl eliminar la carpeta, los cálculos se moverán a "Sin carpeta".`
+    }
+
+    if (!confirm(confirmMessage)) return
+
+    try {
+      await calculationsService.deleteFolder(folderId)
+      
+      // Actualizar la lista de carpetas
+      setFolders(prev => prev.filter(f => f.id !== folderId))
+      
+      // Actualizar los cálculos localmente - mover a "Sin carpeta"
+      setCalculations(prev => 
+        prev.map(calc => 
+          calc.folder_id === folderId 
+            ? { ...calc, folder_id: null, folder: null }
+            : calc
+        )
+      )
+      
+      // Limpiar filtro si estaba filtrado por esta carpeta
+      if (filters.folderId === folderId) {
+        setFilters(prev => ({ ...prev, folderId: '' }))
+      }
+      
+      // Recargar completamente los datos para asegurar sincronización
+      await refreshAllData()
+      
+      if (calculationsInFolder === 0) {
+        toast.success('Carpeta eliminada', {
+          description: `La carpeta "${folder.name}" se eliminó correctamente.`
+        })
+      } else {
+        toast.success('Carpeta eliminada', {
+          description: `La carpeta "${folder.name}" se eliminó y sus ${calculationsInFolder} cálculo(s) se movieron a "Sin carpeta".`
+        })
+      }
+    } catch (error) {
+      console.error('Error deleting folder:', error)
+      toast.error('Error al eliminar carpeta')
+    }
+  }
+
+  // Mover cálculo a carpeta
+  const handleMoveCalculation = async (calculationId, targetFolderId) => {
+    try {
+      await calculationsService.moveCalculationToFolder(
+        calculationId, 
+        targetFolderId === 'none' ? null : targetFolderId
+      )
+      
+      // Actualizar el cálculo localmente
+      setCalculations(prev => 
+        prev.map(calc => 
+          calc.id === calculationId 
+            ? { 
+                ...calc, 
+                folder_id: targetFolderId === 'none' ? null : targetFolderId,
+                folder: targetFolderId === 'none' ? null : folders.find(f => f.id === targetFolderId)
+              } 
+            : calc
+        )
+      )
+      
+      setShowMoveModal(false)
+      setMovingCalculationId(null)
+      
+      const targetName = targetFolderId === 'none' ? 'Sin carpeta' : folders.find(f => f.id === targetFolderId)?.name
+      
+      // Recargar datos para asegurar sincronización
+      await loadCalculations()
+      
+      toast.success('Cálculo movido', {
+        description: `El cálculo se movió a "${targetName}".`
+      })
+    } catch (error) {
+      console.error('Error moving calculation:', error)
+      toast.error('Error al mover cálculo')
+      
+      // En caso de error, recargar para restaurar estado correcto
+      await loadCalculations()
+    }
+  }
+
+  // Eliminar etiqueta de cálculo
+  const handleRemoveTagFromCalculation = async (calculationId, tagId) => {
+    try {
+      await calculationsService.removeTagFromCalculation(calculationId, tagId)
+      
+      // Actualizar estado local
+      setCalculations(prev => 
+        prev.map(calc => 
+          calc.id === calculationId 
+            ? {
+                ...calc,
+                calculation_tags: calc.calculation_tags.filter(ct => ct.tag_id !== tagId)
+              }
+            : calc
+        )
+      )
+
+      const tag = tags.find(t => t.id === tagId)
+      toast.success('Etiqueta eliminada', {
+        description: `La etiqueta "${tag?.name}" se eliminó del cálculo.`
+      })
+      
+    } catch (error) {
+      console.error('Error removing tag from calculation:', error)
+      toast.error('Error al eliminar etiqueta')
     }
   }
 
@@ -302,13 +832,13 @@ export default function HistoryAdvanced() {
   }
 
   const handleLoadCalculation = (calculation) => {
-    localStorage.setItem('loadCalculation', JSON.stringify(calculation))
-    navigate('/')
+    localStorage.setItem('load_calculation', JSON.stringify(calculation))
+    navigate('/interes-mora')
     toast.success('Cálculo cargado', {
       description: 'Los datos se cargaron en la calculadora.',
       action: {
         label: 'Ir a calculadora',
-        onClick: () => navigate('/')
+        onClick: () => navigate('/interes-mora')
       }
     })
   }
@@ -346,20 +876,23 @@ export default function HistoryAdvanced() {
     return (
       <div
         key={calculation.id}
-        className={`bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 transition-all duration-300 hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 animate-fadeInUp ${
+        draggable
+        onDragStart={(e) => handleDragStart(e, calculation)}
+        onDragEnd={handleDragEnd}
+        className={`group bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 min-h-[280px] transition-all duration-300 hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 animate-fadeInUp cursor-move ${
           isSelected ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''
-        }`}
+        } ${draggedCalculation?.id === calculation.id ? 'opacity-50 scale-95' : ''}`}
         style={{ animationDelay: `${index * 50}ms` }}
       >
         <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
             <input
               type="checkbox"
               checked={isSelected}
               onChange={(e) => handleSelectCalculation(calculation.id, e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 mt-1 flex-shrink-0"
             />
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               {editingId === calculation.id ? (
                 <input
                   type="text"
@@ -377,35 +910,88 @@ export default function HistoryAdvanced() {
                   autoFocus
                 />
               ) : (
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 break-words">
                   {calculation.name}
                 </h3>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className={`flex items-center gap-1 ml-3 flex-shrink-0 transition-opacity duration-200 ${
+            editingId === calculation.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}>
             <button
               onClick={() => {
-                setEditingId(calculation.id)
-                setEditingName(calculation.name)
+                if (editingId === calculation.id) {
+                  handleEdit(calculation.id, editingName)
+                } else {
+                  setEditingId(calculation.id)
+                  setEditingName(calculation.name)
+                }
               }}
-              className="p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-              title="Editar nombre"
+              className={`p-2 rounded-full transition-colors cursor-pointer shadow-sm border ${
+                editingId === calculation.id
+                  ? 'bg-blue-100 dark:bg-blue-900/20 border-blue-400 dark:border-blue-500'
+                  : 'bg-white dark:bg-zinc-700 border-zinc-200 dark:border-zinc-600 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+              }`}
+              title={editingId === calculation.id ? "Confirmar edición" : "Editar nombre"}
             >
-              <img src={editarIcon} alt="Editar" className="w-4 h-4" />
+              {editingId === calculation.id ? (
+                <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <img src={editarIcon} alt="Editar" className="w-4 h-4" />
+              )}
             </button>
+            
+            {editingId === calculation.id && (
+              <button
+                onClick={() => {
+                  setEditingId(null)
+                  setEditingName('')
+                }}
+                className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer bg-white dark:bg-zinc-700 shadow-sm border border-red-200 dark:border-red-600"
+                title="Cancelar edición"
+              >
+                <svg className="w-4 h-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            )}
+            
             <button
               onClick={() => handleDuplicate(calculation.id)}
-              className="p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+              className={`p-2 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors cursor-pointer bg-white dark:bg-zinc-700 shadow-sm border border-zinc-200 dark:border-zinc-600 ${
+                editingId === calculation.id ? 'opacity-50 pointer-events-none' : ''
+              }`}
               title="Duplicar"
+              disabled={editingId === calculation.id}
             >
               <img src={copiarIcon} alt="Duplicar" className="w-4 h-4" />
             </button>
             <button
+              onClick={() => {
+                setMovingCalculationId(calculation.id)
+                setShowMoveModal(true)
+              }}
+              className={`p-2 rounded-full hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors cursor-pointer bg-white dark:bg-zinc-700 shadow-sm border border-zinc-200 dark:border-zinc-600 ${
+                editingId === calculation.id ? 'opacity-50 pointer-events-none' : ''
+              }`}
+              title="Mover a carpeta"
+              disabled={editingId === calculation.id}
+            >
+              <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path>
+              </svg>
+            </button>
+            <button
               onClick={() => handleDelete(calculation.id)}
-              className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              className={`p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer bg-white dark:bg-zinc-700 shadow-sm border border-zinc-200 dark:border-zinc-600 ${
+                editingId === calculation.id ? 'opacity-50 pointer-events-none' : ''
+              }`}
               title="Eliminar"
+              disabled={editingId === calculation.id}
             >
               <img src={eliminarIcon} alt="Eliminar" className="w-4 h-4" />
             </button>
@@ -424,8 +1010,8 @@ export default function HistoryAdvanced() {
           {calculation.folder && (
             <div className="flex justify-between">
               <span>Carpeta:</span>
-              <span className="bg-zinc-100 dark:bg-zinc-700 px-2 py-1 rounded text-xs">
-                {calculation.folder.name}
+              <span className="bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 px-2 py-1 rounded text-xs flex items-center gap-1">
+                📁 {calculation.folder.name}
               </span>
             </div>
           )}
@@ -434,13 +1020,23 @@ export default function HistoryAdvanced() {
               {calculation.calculation_tags.map((tagRelation) => (
                 <span
                   key={tagRelation.tags.id}
-                  className="inline-block px-2 py-1 text-xs rounded"
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded group/tag hover:bg-opacity-30 transition-all cursor-pointer"
                   style={{
                     backgroundColor: tagRelation.tags.color + '20',
                     color: tagRelation.tags.color
                   }}
                 >
                   {tagRelation.tags.name}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRemoveTagFromCalculation(calculation.id, tagRelation.tags.id)
+                    }}
+                    className="opacity-0 group-hover/tag:opacity-100 text-xs hover:bg-red-500 hover:text-white w-4 h-4 rounded-full flex items-center justify-center transition-all ml-1"
+                    title="Eliminar etiqueta"
+                  >
+                    ✕
+                  </button>
                 </span>
               ))}
             </div>
@@ -453,6 +1049,229 @@ export default function HistoryAdvanced() {
         >
           Cargar en calculadora
         </button>
+      </div>
+    )
+  }
+
+  // Función para organizar carpetas en jerarquía
+  const buildFolderTree = (folders) => {
+    const folderMap = {}
+    const tree = []
+
+    // Crear mapa de carpetas
+    folders.forEach(folder => {
+      folderMap[folder.id] = { ...folder, children: [] }
+    })
+
+    // Construir árbol
+    folders.forEach(folder => {
+      if (folder.parent_id && folderMap[folder.parent_id]) {
+        folderMap[folder.parent_id].children.push(folderMap[folder.id])
+      } else {
+        tree.push(folderMap[folder.id])
+      }
+    })
+
+    return tree
+  }
+
+  // Componente para renderizar carpeta con jerarquía
+  const FolderTreeItem = ({ folder, depth = 0, onSelect }) => {
+    const [isExpanded, setIsExpanded] = useState(true)
+    const [showActions, setShowActions] = useState(false)
+    const hasChildren = folder.children && folder.children.length > 0
+
+    return (
+      <div>
+        <div 
+          className={`group flex items-center gap-2 py-2 px-3 rounded-lg transition-colors ${
+            dragOverFolder === folder.id 
+              ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
+              : filters.folderId === folder.id 
+                ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
+                : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+          }`}
+          style={{ paddingLeft: `${depth * 20 + 12}px` }}
+          onMouseEnter={() => setShowActions(true)}
+          onMouseLeave={() => setShowActions(false)}
+          onDragOver={(e) => handleDragOver(e, folder.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, folder.id)}
+        >
+          {hasChildren && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsExpanded(!isExpanded)
+              }}
+              className="w-4 h-4 flex items-center justify-center text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 cursor-pointer"
+            >
+              {isExpanded ? '▼' : '▶'}
+            </button>
+          )}
+          {!hasChildren && <div className="w-4"></div>}
+          
+          <span className="text-yellow-500">📁</span>
+          
+          {editingFolderId === folder.id ? (
+            <input
+              type="text"
+              value={editingFolderName}
+              onChange={(e) => setEditingFolderName(e.target.value)}
+              onBlur={() => handleEditFolder(folder.id, editingFolderName)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleEditFolder(folder.id, editingFolderName)
+                if (e.key === 'Escape') {
+                  setEditingFolderId(null)
+                  setEditingFolderName('')
+                }
+              }}
+              className="flex-1 text-sm bg-transparent border-b-2 border-blue-500 focus:outline-none text-zinc-700 dark:text-zinc-300"
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span 
+              className="flex-1 text-sm text-zinc-700 dark:text-zinc-300 truncate cursor-pointer"
+              onClick={() => onSelect(folder.id)}
+            >
+              {folder.name}
+            </span>
+          )}
+          
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            ({calculations.filter(calc => calc.folder_id === folder.id).length})
+          </span>
+
+          {/* Acciones de carpeta */}
+          {showActions && editingFolderId !== folder.id && (
+            <div className="flex items-center gap-2 ml-3" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEditingFolderId(folder.id)
+                  setEditingFolderName(folder.name)
+                }}
+                className="p-2 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-colors cursor-pointer border border-blue-200 dark:border-blue-700"
+                title="Editar nombre"
+              >
+                <img src={editarIcon} alt="Editar" className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteFolder(folder.id)
+                }}
+                className="p-2 rounded-full hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors cursor-pointer border border-red-200 dark:border-red-700"
+                title="Eliminar carpeta"
+              >
+                <img src={eliminarIcon} alt="Eliminar" className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+        
+        {hasChildren && isExpanded && (
+          <div>
+            {folder.children.map(child => (
+              <FolderTreeItem 
+                key={child.id} 
+                folder={child} 
+                depth={depth + 1} 
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Componente para el explorador de carpetas
+  const FolderExplorer = () => {
+    const folderTree = buildFolderTree(folders)
+    const calculationsWithoutFolder = calculations.filter(calc => !calc.folder_id).length
+
+    return (
+      <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-4 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            📁 Explorador de Carpetas
+          </h3>
+          <button
+            onClick={() => setShowCreateFolder(true)}
+            className="text-sm bg-purple-100 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 px-3 py-1 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/30 transition-colors cursor-pointer"
+          >
+            + Nueva carpeta
+          </button>
+        </div>
+
+        <div className="space-y-1 max-h-64 overflow-y-auto">
+          {/* Opción "Todas las carpetas" */}
+          <div 
+            className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
+              !filters.folderId 
+                ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
+                : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+            }`}
+            onClick={() => setFilters(prev => ({ ...prev, folderId: '' }))}
+          >
+            <span className="text-blue-500">🌳</span>
+            <span className="flex-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Rama principal
+            </span>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              ({calculations.length})
+            </span>
+          </div>
+
+          {/* Cálculos sin carpeta */}
+          {calculationsWithoutFolder > 0 && (
+            <div 
+              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-colors ${
+                dragOverFolder === null 
+                  ? 'bg-green-100 dark:bg-green-900/30 border-2 border-green-300 dark:border-green-600 shadow-md' 
+                  : filters.folderId === 'none' 
+                    ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' 
+                    : 'hover:bg-zinc-100 dark:hover:bg-zinc-700'
+              }`}
+              onClick={() => setFilters(prev => ({ ...prev, folderId: 'none' }))}
+              onDragOver={(e) => handleDragOver(e, null)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, null)}
+            >
+              <span className="text-zinc-400">📄</span>
+              <span className="flex-1 text-sm text-zinc-700 dark:text-zinc-300">
+                Sin carpeta
+              </span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                ({calculationsWithoutFolder})
+              </span>
+            </div>
+          )}
+
+          {/* Árbol de carpetas */}
+          {folderTree.map(folder => (
+            <FolderTreeItem 
+              key={folder.id} 
+              folder={folder} 
+              onSelect={(folderId) => viewFolder(folderId)}
+            />
+          ))}
+
+          {folderTree.length === 0 && (
+            <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
+              <div className="text-2xl mb-2">📁</div>
+              <p className="text-sm">No hay carpetas creadas</p>
+              <button
+                onClick={() => setShowCreateFolder(true)}
+                className="text-purple-600 dark:text-purple-400 text-sm mt-2 hover:underline"
+              >
+                Crear primera carpeta
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -470,9 +1289,15 @@ export default function HistoryAdvanced() {
             onChange={(e) => setFilters(prev => ({ ...prev, folderId: e.target.value }))}
             className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:text-zinc-100"
           >
-            <option value="">Todas las carpetas</option>
-            {folders.map(folder => (
-              <option key={folder.id} value={folder.id}>{folder.name}</option>
+            <option value="">🌳 Rama principal</option>
+            <option value="none">📄 Sin carpeta</option>
+            {buildFolderTree(folders).map(folder => (
+              <optgroup key={`group-${folder.id}`} label={`📁 ${folder.name}`}>
+                <option value={folder.id}>📁 {folder.name}</option>
+                {folder.children?.map(child => (
+                  <option key={child.id} value={child.id}>{'  ├── 📁 ' + child.name}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
@@ -714,8 +1539,13 @@ export default function HistoryAdvanced() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {/* Barra de búsqueda y controles */}
-        <div className="mb-6">
+        {/* Vista de carpeta específica o vista principal */}
+        {viewingFolder ? (
+          renderFolderView()
+        ) : (
+          <>
+            {/* Barra de búsqueda y controles */}
+            <div className="mb-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex-1 max-w-md">
               <input
@@ -730,7 +1560,7 @@ export default function HistoryAdvanced() {
             <div className="flex gap-2">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`px-4 py-2 rounded-lg border transition-colors ${
+                className={`px-4 py-2 rounded-lg border transition-colors cursor-pointer ${
                   showFilters 
                     ? 'bg-blue-600 text-white border-blue-600' 
                     : 'border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'
@@ -740,15 +1570,9 @@ export default function HistoryAdvanced() {
               </button>
               <button
                 onClick={() => setShowCreateTag(true)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors cursor-pointer"
               >
                 + Etiqueta
-              </button>
-              <button
-                onClick={() => setShowCreateFolder(true)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-              >
-                + Carpeta
               </button>
             </div>
           </div>
@@ -767,6 +1591,9 @@ export default function HistoryAdvanced() {
             </div>
           )}
         </div>
+
+        {/* Explorador de carpetas */}
+        <FolderExplorer />
 
         {/* Filtros */}
         {showFilters && renderFilters()}
@@ -823,11 +1650,13 @@ export default function HistoryAdvanced() {
             {calculations.map((calculation, index) => renderCalculationCard(calculation, index))}
           </div>
         )}
+          </>
+        )}
       </div>
 
       {/* Modal para crear etiqueta */}
       {showCreateTag && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white dark:bg-zinc-800 rounded-lg p-6 w-full max-w-md mx-4 animate-scaleIn">
             <h3 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-100">
               Crear nueva etiqueta
@@ -889,7 +1718,7 @@ export default function HistoryAdvanced() {
 
       {/* Modal para crear carpeta */}
       {showCreateFolder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white dark:bg-zinc-800 rounded-lg p-6 w-full max-w-md mx-4 animate-scaleIn">
             <h3 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-100">
               Crear nueva carpeta
@@ -949,6 +1778,86 @@ export default function HistoryAdvanced() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para mover cálculo */}
+      {showMoveModal && movingCalculationId && (
+        <div className="fixed inset-0 bg-white/20 dark:bg-black/20 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-800 rounded-lg p-6 w-full max-w-md mx-4 animate-scaleIn">
+            <h3 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-100">
+              Mover cálculo a carpeta
+            </h3>
+            
+            <div className="mb-4">
+              <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+                Selecciona la carpeta de destino:
+              </p>
+              
+              <div className="space-y-2 max-h-64 overflow-y-auto border border-zinc-200 dark:border-zinc-700 rounded-lg p-3">
+                {/* Opción "Sin carpeta" */}
+                <button
+                  onClick={() => handleMoveCalculation(movingCalculationId, 'none')}
+                  className="w-full text-left p-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="text-zinc-400">📄</span>
+                  <span className="text-sm text-zinc-700 dark:text-zinc-300">Sin carpeta</span>
+                </button>
+                
+                {/* Lista de carpetas */}
+                {buildFolderTree(folders).map(folder => (
+                  <div key={folder.id}>
+                    <button
+                      onClick={() => handleMoveCalculation(movingCalculationId, folder.id)}
+                      className="w-full text-left p-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      <span className="text-yellow-500">📁</span>
+                      <span className="text-sm text-zinc-700 dark:text-zinc-300">{folder.name}</span>
+                    </button>
+                    
+                    {/* Subcarpetas */}
+                    {folder.children?.map(child => (
+                      <button
+                        key={child.id}
+                        onClick={() => handleMoveCalculation(movingCalculationId, child.id)}
+                        className="w-full text-left p-2 pl-8 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <span className="text-yellow-500">📁</span>
+                        <span className="text-sm text-zinc-700 dark:text-zinc-300">{child.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                
+                {folders.length === 0 && (
+                  <div className="text-center py-4 text-zinc-500 dark:text-zinc-400">
+                    <p className="text-sm">No hay carpetas disponibles</p>
+                    <button
+                      onClick={() => {
+                        setShowMoveModal(false)
+                        setShowCreateFolder(true)
+                      }}
+                      className="text-purple-600 dark:text-purple-400 text-sm mt-2 hover:underline cursor-pointer"
+                    >
+                      Crear carpeta
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setShowMoveModal(false)
+                  setMovingCalculationId(null)
+                }}
+                className="px-4 py-2 text-zinc-600 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
