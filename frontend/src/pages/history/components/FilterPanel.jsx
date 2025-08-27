@@ -1,38 +1,12 @@
-import { buildFolderTree } from '../utils/folderTree'
-
 export const FilterPanel = ({
   filters,
   setFilters,
-  folders,
   resetFilters,
   setShowFilters
 }) => {
   return (
     <div className="bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 mb-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Filtro por carpeta */}
-        <div>
-          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-            Carpeta
-          </label>
-          <select
-            value={filters.folderId}
-            onChange={(e) => setFilters(prev => ({ ...prev, folderId: e.target.value }))}
-            className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-zinc-700 dark:text-zinc-100"
-          >
-            <option value="">🌳 Rama principal</option>
-            <option value="none">📄 Sin carpeta</option>
-            {buildFolderTree(folders).map(folder => (
-              <optgroup key={`group-${folder.id}`} label={`📁 ${folder.name}`}>
-                <option value={folder.id}>📁 {folder.name}</option>
-                {folder.children?.map(child => (
-                  <option key={child.id} value={child.id}>{'  ├── 📁 ' + child.name}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-
         {/* Filtro por fecha desde */}
         <div>
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">

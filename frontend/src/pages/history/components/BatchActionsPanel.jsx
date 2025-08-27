@@ -3,9 +3,7 @@ import { memo } from 'react'
 export const BatchActionsPanel = memo(({
   selectedCalculations,
   handleBatchDelete,
-  handleBatchMoveToFolder,
   handleBatchAddTag,
-  folders,
   tags,
   setSelectedCalculations
 }) => {
@@ -24,20 +22,6 @@ export const BatchActionsPanel = memo(({
           >
             Eliminar
           </button>
-          <select
-            onChange={(e) => {
-              if (e.target.value) {
-                handleBatchMoveToFolder(e.target.value)
-                e.target.value = ''
-              }
-            }}
-            className="px-3 py-1 border border-blue-300 rounded text-sm focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">Mover a carpeta...</option>
-            {folders.map(folder => (
-              <option key={folder.id} value={folder.id}>{folder.name}</option>
-            ))}
-          </select>
           <select
             onChange={(e) => {
               if (e.target.value) {

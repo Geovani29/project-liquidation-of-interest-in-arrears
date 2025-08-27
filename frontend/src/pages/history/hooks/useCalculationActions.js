@@ -108,22 +108,6 @@ export const useCalculationActions = (loadCalculations, setCalculations) => {
     }
   }
 
-  const handleBatchMoveToFolder = async (folderId) => {
-    if (!selectedCalculations.length) return
-
-    try {
-      await calculationsService.moveCalculationsToFolderInBatch(selectedCalculations, folderId)
-      setSelectedCalculations([])
-      loadCalculations()
-      toast.success('Cálculos movidos', {
-        description: `Se movieron ${selectedCalculations.length} cálculos a la carpeta.`
-      })
-    } catch (error) {
-      console.error('Error moving calculations:', error)
-      toast.error('Error al mover cálculos')
-    }
-  }
-
   const handleBatchAddTag = async (tagId) => {
     if (!selectedCalculations.length) return
 
@@ -154,7 +138,6 @@ export const useCalculationActions = (loadCalculations, setCalculations) => {
     handleSelectCalculation,
     handleSelectAll,
     handleBatchDelete,
-    handleBatchMoveToFolder,
     handleBatchAddTag
   }
 }

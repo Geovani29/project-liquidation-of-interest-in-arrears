@@ -32,17 +32,17 @@ const EmptyState = memo(({ searchQuery }) => {
     <div className="text-center py-12">
       <div className="text-6xl mb-4">📊</div>
       <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100 mb-2">
-        {searchQuery ? 'No se encontraron cálculos' : 'No hay archivos sin carpeta'}
+        {searchQuery ? 'No se encontraron cálculos' : 'No hay cálculos guardados'}
       </h3>
       <p className="text-zinc-600 dark:text-zinc-400 mb-6">
         {searchQuery 
           ? 'Intenta con otros términos de búsqueda o ajusta los filtros'
-          : 'Todos tus cálculos están organizados en carpetas. Puedes usar el explorador de carpetas para navegar o crear nuevos cálculos.'
+          : 'Aún no has guardado ningún cálculo. Crea tu primer cálculo para empezar.'
         }
       </p>
       {!searchQuery && (
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/app/c')}
           className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
         >
           Ir a la calculadora
@@ -60,17 +60,12 @@ export const CalculationsList = memo(({
   editingId,
   editingName,
   setEditingName,
-  draggedCalculation,
   handleSelectCalculation,
   setEditingId,
   handleEdit,
   handleDuplicate,
-  setMovingCalculationId,
-  setShowMoveModal,
   handleDelete,
   handleLoadCalculation,
-  handleDragStart,
-  handleDragEnd,
   handleRemoveTagFromCalculation,
   tags
 }) => {
@@ -78,15 +73,13 @@ export const CalculationsList = memo(({
     return <LoadingSkeleton />
   }
 
-  const calculationsToShow = calculations.filter(calc => !calc.folder_id)
-  
-  if (calculationsToShow.length === 0) {
+  if (calculations.length === 0) {
     return <EmptyState searchQuery={searchQuery} />
   }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {calculationsToShow.map((calculation, index) => (
+      {calculations.map((calculation, index) => (
         <CalculationCard
           key={calculation.id}
           calculation={calculation}
@@ -95,17 +88,12 @@ export const CalculationsList = memo(({
           editingId={editingId}
           editingName={editingName}
           setEditingName={setEditingName}
-          draggedCalculation={draggedCalculation}
           handleSelectCalculation={handleSelectCalculation}
           setEditingId={setEditingId}
           handleEdit={handleEdit}
           handleDuplicate={handleDuplicate}
-          setMovingCalculationId={setMovingCalculationId}
-          setShowMoveModal={setShowMoveModal}
           handleDelete={handleDelete}
           handleLoadCalculation={handleLoadCalculation}
-          handleDragStart={handleDragStart}
-          handleDragEnd={handleDragEnd}
           handleRemoveTagFromCalculation={handleRemoveTagFromCalculation}
           tags={tags}
         />

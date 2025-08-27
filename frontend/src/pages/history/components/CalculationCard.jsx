@@ -11,17 +11,12 @@ export const CalculationCard = memo(({
   editingId,
   editingName,
   setEditingName,
-  draggedCalculation,
   handleSelectCalculation,
   setEditingId,
   handleEdit,
   handleDuplicate,
-  setMovingCalculationId,
-  setShowMoveModal,
   handleDelete,
   handleLoadCalculation,
-  handleDragStart,
-  handleDragEnd,
   handleRemoveTagFromCalculation,
   tags
 }) => {
@@ -29,12 +24,9 @@ export const CalculationCard = memo(({
 
   return (
     <div
-      draggable
-      onDragStart={(e) => handleDragStart(e, calculation)}
-      onDragEnd={handleDragEnd}
-      className={`group bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 min-h-[280px] transition-all duration-300 hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 animate-fadeInUp cursor-move ${
+      className={`group bg-white dark:bg-zinc-800 rounded-lg shadow-sm border border-zinc-200 dark:border-zinc-700 p-6 min-h-[280px] transition-all duration-300 hover:shadow-md hover:border-zinc-300 dark:hover:border-zinc-600 animate-fadeInUp ${
         isSelected ? 'ring-2 ring-blue-500 dark:ring-blue-400' : ''
-      } ${draggedCalculation?.id === calculation.id ? 'opacity-50 scale-95' : ''}`}
+      }`}
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="flex items-start justify-between mb-4">
@@ -124,21 +116,6 @@ export const CalculationCard = memo(({
             <img src={copiarIcon} alt="Duplicar" className="w-4 h-4" />
           </button>
           <button
-            onClick={() => {
-              setMovingCalculationId(calculation.id)
-              setShowMoveModal(true)
-            }}
-            className={`p-2 rounded-full hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors cursor-pointer bg-white dark:bg-zinc-700 shadow-sm border border-zinc-200 dark:border-zinc-600 ${
-              editingId === calculation.id ? 'opacity-50 pointer-events-none' : ''
-            }`}
-            title="Mover a carpeta"
-            disabled={editingId === calculation.id}
-          >
-            <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path>
-            </svg>
-          </button>
-          <button
             onClick={() => handleDelete(calculation.id)}
             className={`p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors cursor-pointer bg-white dark:bg-zinc-700 shadow-sm border border-zinc-200 dark:border-zinc-600 ${
               editingId === calculation.id ? 'opacity-50 pointer-events-none' : ''
@@ -160,14 +137,6 @@ export const CalculationCard = memo(({
           <span>Creado:</span>
           <span>{formatDate(calculation.created_at)}</span>
         </div>
-        {calculation.folder && (
-          <div className="flex justify-between">
-            <span>Carpeta:</span>
-            <span className="bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 px-2 py-1 rounded text-xs flex items-center gap-1">
-              📁 {calculation.folder.name}
-            </span>
-          </div>
-        )}
         {calculation.calculation_tags?.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {calculation.calculation_tags.map((tagRelation) => (

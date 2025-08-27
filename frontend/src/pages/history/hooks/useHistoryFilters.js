@@ -6,7 +6,6 @@ export const useHistoryFilters = (loadCalculations) => {
   
   // Estados para filtros avanzados
   const [filters, setFilters] = useState({
-    folderId: 'sin-carpeta', // Estado especial para la vista principal
     dateFrom: '',
     dateTo: '',
     capitalMin: '',
@@ -33,17 +32,11 @@ export const useHistoryFilters = (loadCalculations) => {
       query: searchQuery.trim() || undefined
     }
 
-    // Si estamos en la vista principal (sin-carpeta), no aplicar filtro de carpeta
-    if (filters.folderId === 'sin-carpeta') {
-      searchFilters.folderId = undefined
-    }
-
     loadCalculations(searchFilters)
   }
 
   const resetFilters = () => {
     setFilters({
-      folderId: '',
       dateFrom: '',
       dateTo: '',
       capitalMin: '',

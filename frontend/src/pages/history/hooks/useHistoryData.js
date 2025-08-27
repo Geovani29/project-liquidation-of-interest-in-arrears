@@ -6,12 +6,7 @@ export const useHistoryData = (user, supabaseUserId) => {
   const [calculations, setCalculations] = useState([])
   const [loading, setLoading] = useState(true)
   const [totalCount, setTotalCount] = useState(0)
-  const [folders, setFolders] = useState([])
   const [tags, setTags] = useState([])
-
-  // Estados para vista de carpeta específica
-  const [viewingFolder, setViewingFolder] = useState(null)
-  const [folderCalculations, setFolderCalculations] = useState([])
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -27,11 +22,7 @@ export const useHistoryData = (user, supabaseUserId) => {
         await calculationsService.setUser(supabaseUserId)
       }
       
-      const [foldersData, tagsData] = await Promise.all([
-        calculationsService.getFolders(),
-        calculationsService.getTags()
-      ])
-      setFolders(foldersData)
+      const tagsData = await calculationsService.getTags()
       setTags(tagsData)
     } catch (error) {
       console.error('Error loading initial data:', error)
@@ -50,8 +41,6 @@ export const useHistoryData = (user, supabaseUserId) => {
       // Asegurar que los datos tengan la estructura correcta
       const processedData = result.data.map(calc => ({
         ...calc,
-        folder_id: calc.folder_id || null,
-        folder: calc.folder || null,
         calculation_tags: calc.calculation_tags || []
       }))
       
@@ -70,57 +59,16 @@ export const useHistoryData = (user, supabaseUserId) => {
     }
   }
 
-  // Cargar cálculos de una carpeta específica
-  const loadFolderCalculations = async (folderId) => {
-    setLoading(true)
-    try {
-      const result = await calculationsService.searchCalculationsAdvanced({
-        folderId: folderId === 'none' ? null : folderId,
-        limit: 1000 // Cargar todos los de la carpeta
-      })
-      
-      setFolderCalculations(result.data)
-    } catch (error) {
-      console.error('Error loading folder calculations:', error)
-      toast.error('Error al cargar cálculos de la carpeta')
-      setFolderCalculations([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
   // Función para refrescar todos los datos
   const refreshAllData = async () => {
     try {
-      const [foldersData, tagsData] = await Promise.all([
-        calculationsService.getFolders(),
-        calculationsService.getTags(),
-        loadCalculations()
-      ])
-      setFolders(foldersData)
+      const tagsData = await calculationsService.getTags()
       setTags(tagsData)
-      
-      // Si estamos viendo una carpeta específica, recargar sus cálculos
-      if (viewingFolder) {
-        await loadFolderCalculations(viewingFolder)
-      }
+      await loadCalculations()
     } catch (error) {
       console.error('Error refreshing data:', error)
       toast.error('Error al actualizar datos')
     }
-  }
-
-  // Cambiar a vista de carpeta específica
-  const viewFolder = async (folderId) => {
-    setViewingFolder(folderId)
-    await loadFolderCalculations(folderId)
-  }
-
-  // Volver a la vista principal
-  const backToMainView = () => {
-    setViewingFolder(null)
-    setFolderCalculations([])
-    loadCalculations()
   }
 
   return {
@@ -128,22 +76,14 @@ export const useHistoryData = (user, supabaseUserId) => {
     calculations,
     loading,
     totalCount,
-    folders,
     tags,
-    viewingFolder,
-    folderCalculations,
 
     // Setters
     setCalculations,
-    setFolders,
     setTags,
-    setFolderCalculations,
 
     // Funciones
     loadCalculations,
-    loadFolderCalculations,
-    refreshAllData,
-    viewFolder,
-    backToMainView
+    refreshAllData
   }
 }
